@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from "./fetch-models.js";
+import { fetchWithTimeout, DEFAULT_FETCH_TIMEOUT_MS } from "./http.js";
 import type { ModelConfig, ProviderConfig } from "./types.js";
 
 function joinUrl(baseUrl: string, suffix: string): string {
@@ -12,8 +13,10 @@ export async function testConnection(opts: {
   provider: ProviderConfig;
   model: ModelConfig;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<{ ok: boolean; status?: number; detail: string }> {
   const fetchFn = opts.fetchImpl ?? fetch;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
   const { provider, model } = opts;
   const auth = buildAuthHeaders(provider.api, provider.apiKey);
   // When authHeader is explicitly false, still send provider-specific keys
@@ -57,11 +60,16 @@ export async function testConnection(opts: {
   }
 
   try {
-    const res = await fetchFn(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      },
+      timeoutMs,
+      fetchFn,
+    );
     const text = (await res.text().catch(() => "")).slice(0, 300);
     if (!res.ok) {
       return {

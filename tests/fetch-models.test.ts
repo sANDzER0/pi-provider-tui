@@ -120,4 +120,28 @@ describe("fetchRemoteModels", () => {
     assert.equal(r.ok, false);
     if (!r.ok) assert.match(r.error, /ECONNREFUSED/);
   });
+
+  it("returns timeout error when fetch is slow", async () => {
+    const fetchImpl = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        const t = setTimeout(() => {
+          reject(new Error("should have been aborted"));
+        }, 5_000);
+        init?.signal?.addEventListener("abort", () => {
+          clearTimeout(t);
+          const err = new Error("The operation was aborted");
+          err.name = "AbortError";
+          reject(err);
+        });
+      });
+    };
+    const r = await fetchRemoteModels({
+      baseUrl: "https://ex.com/v1",
+      api: "openai-completions",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      timeoutMs: 50,
+    });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.error, /timed out/i);
+  });
 });

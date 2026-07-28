@@ -8,7 +8,7 @@ import {
   type ProviderConfig,
 } from "../types.js";
 import { handleCancel } from "../ui-cancel.js";
-import { pickModels } from "./models-pick.js";
+import { manualModels, pickModels } from "./models-pick.js";
 
 function isUrl(s: string): boolean {
   try {
@@ -33,7 +33,11 @@ export async function editProvider(
   });
   if (handleCancel(idSel)) return null;
   const id = String(idSel);
-  let provider: ProviderConfig = { ...doc.providers[id], models: [...doc.providers[id].models] };
+  const existing = doc.providers[id];
+  let provider: ProviderConfig = {
+    ...existing,
+    models: [...(existing.models ?? [])],
+  };
 
   for (;;) {
     const field = await p.select({
@@ -44,7 +48,10 @@ export async function editProvider(
         { value: "api", label: `api (${provider.api})` },
         { value: "apiKey", label: `apiKey (${maskKey(provider.apiKey)})` },
         { value: "authHeader", label: `authHeader (${provider.authHeader})` },
-        { value: "models", label: `models (${provider.models.length})` },
+        {
+          value: "models",
+          label: `models (${(provider.models ?? []).length})`,
+        },
         { value: "save", label: "Save & return" },
         { value: "cancel", label: "Cancel without saving" },
       ],
@@ -55,7 +62,7 @@ export async function editProvider(
       case "cancel":
         return null;
       case "save": {
-        if (!provider.models.length) {
+        if (!(provider.models ?? []).length) {
           p.log.error("At least one model required.");
           break;
         }
@@ -96,12 +103,17 @@ export async function editProvider(
       }
       case "apiKey": {
         const v = await p.text({
-          message: "apiKey (plaintext)",
-          initialValue: provider.apiKey ?? "",
+          message: "apiKey (leave empty to keep current)",
+          placeholder: provider.apiKey
+            ? "•••• keep current / enter new"
+            : "enter new key",
+          initialValue: "",
         });
         if (handleCancel(v)) return null;
         const apiKey = String(v).trim();
-        provider = { ...provider, apiKey: apiKey || undefined };
+        if (apiKey) {
+          provider = { ...provider, apiKey };
+        }
         break;
       }
       case "authHeader": {
@@ -131,14 +143,15 @@ export async function editProvider(
           if (models === null) break;
           provider = { ...provider, models };
         } else {
-          const models = await pickModels({
-            baseUrl: provider.baseUrl,
-            api: provider.api,
-            apiKey: provider.apiKey,
-          });
-          // pickModels always tries fetch first; acceptable for v1.
-          if (models === null) break;
-          provider = { ...provider, models };
+          for (;;) {
+            const models = await manualModels();
+            if (models === null) break;
+            if (models.length > 0) {
+              provider = { ...provider, models };
+              break;
+            }
+            p.log.error("At least one model is required.");
+          }
         }
         break;
       }

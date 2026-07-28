@@ -1,3 +1,4 @@
+import { fetchWithTimeout, DEFAULT_FETCH_TIMEOUT_MS } from "./http.js";
 import { defaultModel, type ApiType, type ModelConfig } from "./types.js";
 
 export function buildModelsUrl(baseUrl: string): string {
@@ -74,6 +75,7 @@ export async function fetchRemoteModels(opts: {
   api: ApiType;
   apiKey?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<
   | { ok: true; models: ModelConfig[]; skipped: number }
   | { ok: false; error: string }
@@ -81,8 +83,9 @@ export async function fetchRemoteModels(opts: {
   const fetchFn = opts.fetchImpl ?? fetch;
   const url = buildModelsUrl(opts.baseUrl);
   const headers = buildAuthHeaders(opts.api, opts.apiKey);
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
   try {
-    const res = await fetchFn(url, { headers });
+    const res = await fetchWithTimeout(url, { headers }, timeoutMs, fetchFn);
     if (!res.ok) {
       const body = (await res.text().catch(() => "")).slice(0, 200);
       return {

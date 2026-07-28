@@ -1,7 +1,12 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ModelsFile, ProviderConfig } from "./types.js";
+import {
+  API_TYPES,
+  type ApiType,
+  type ModelsFile,
+  type ProviderConfig,
+} from "./types.js";
 
 export function getModelsPath(): string {
   if (process.env.PI_MODELS_PATH && process.env.PI_MODELS_PATH.trim()) {
@@ -18,6 +23,41 @@ export function maskKey(key: string | undefined): string {
 
 function emptyDoc(): ModelsFile {
   return { providers: {} };
+}
+
+export function normalizeProvider(raw: unknown): ProviderConfig {
+  const obj =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const apiRaw = obj.api;
+  const api: ApiType =
+    typeof apiRaw === "string" && (API_TYPES as string[]).includes(apiRaw)
+      ? (apiRaw as ApiType)
+      : typeof apiRaw === "string"
+        ? (apiRaw as ApiType)
+        : "openai-completions";
+  const models = Array.isArray(obj.models) ? obj.models : [];
+  return {
+    ...(obj as object),
+    name: typeof obj.name === "string" ? obj.name : undefined,
+    baseUrl: typeof obj.baseUrl === "string" ? obj.baseUrl : "",
+    api,
+    apiKey: typeof obj.apiKey === "string" ? obj.apiKey : undefined,
+    authHeader:
+      typeof obj.authHeader === "boolean" ? obj.authHeader : undefined,
+    models: models as ProviderConfig["models"],
+  };
+}
+
+export function normalizeProviders(
+  providers: Record<string, unknown>,
+): Record<string, ProviderConfig> {
+  const out: Record<string, ProviderConfig> = {};
+  for (const [id, raw] of Object.entries(providers)) {
+    out[id] = normalizeProvider(raw);
+  }
+  return out;
 }
 
 export async function loadModelsFile(
@@ -53,7 +93,13 @@ export async function loadModelsFile(
     );
   }
 
-  return parsed as ModelsFile;
+  const doc = parsed as ModelsFile;
+  return {
+    ...doc,
+    providers: normalizeProviders(
+      doc.providers as unknown as Record<string, unknown>,
+    ),
+  };
 }
 
 export async function saveModelsFile(

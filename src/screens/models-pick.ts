@@ -3,7 +3,7 @@ import { fetchRemoteModels } from "../fetch-models.js";
 import { defaultModel, type ApiType, type ModelConfig } from "../types.js";
 import { handleCancel } from "../ui-cancel.js";
 
-async function manualModels(): Promise<ModelConfig[] | null> {
+export async function manualModels(): Promise<ModelConfig[] | null> {
   const models: ModelConfig[] = [];
   for (;;) {
     const id = await p.text({
@@ -68,44 +68,47 @@ export async function pickModels(opts: {
   baseUrl: string;
   api: ApiType;
   apiKey?: string;
+  skipFetch?: boolean;
 }): Promise<ModelConfig[] | null> {
-  const spinner = p.spinner();
-  spinner.start("Fetching models from gateway…");
-  const result = await fetchRemoteModels({
-    baseUrl: opts.baseUrl,
-    api: opts.api,
-    apiKey: opts.apiKey,
-  });
-  spinner.stop(
-    result.ok
-      ? `Fetched ${result.models.length} model(s)`
-      : `Fetch failed: ${result.error}`,
-  );
-
-  if (result.ok && result.models.length > 0) {
-    if (result.skipped > 0) {
-      p.log.warn(`Skipped ${result.skipped} unparseable entries`);
-    }
-    const selected = await p.multiselect({
-      message: "Select models (space to toggle)",
-      options: result.models.map((m) => ({
-        value: m.id,
-        label: m.name === m.id ? m.id : `${m.name} (${m.id})`,
-      })),
-      required: false,
+  if (!opts.skipFetch) {
+    const spinner = p.spinner();
+    spinner.start("Fetching models from gateway…");
+    const result = await fetchRemoteModels({
+      baseUrl: opts.baseUrl,
+      api: opts.api,
+      apiKey: opts.apiKey,
     });
-    if (handleCancel(selected)) return null;
+    spinner.stop(
+      result.ok
+        ? `Fetched ${result.models.length} model(s)`
+        : `Fetch failed: ${result.error}`,
+    );
 
-    const ids = selected as string[];
-    if (ids.length > 0) {
-      const byId = new Map(result.models.map((m) => [m.id, m]));
-      return ids.map((id) => byId.get(id)!).filter(Boolean);
+    if (result.ok && result.models.length > 0) {
+      if (result.skipped > 0) {
+        p.log.warn(`Skipped ${result.skipped} unparseable entries`);
+      }
+      const selected = await p.multiselect({
+        message: "Select models (space to toggle)",
+        options: result.models.map((m) => ({
+          value: m.id,
+          label: m.name === m.id ? m.id : `${m.name} (${m.id})`,
+        })),
+        required: false,
+      });
+      if (handleCancel(selected)) return null;
+
+      const ids = selected as string[];
+      if (ids.length > 0) {
+        const byId = new Map(result.models.map((m) => [m.id, m]));
+        return ids.map((id) => byId.get(id)!).filter(Boolean);
+      }
+      p.log.info("No models selected — enter manually.");
+    } else if (result.ok) {
+      p.log.info("Remote list empty — enter models manually.");
+    } else {
+      p.log.warn("Falling back to manual model entry.");
     }
-    p.log.info("No models selected — enter manually.");
-  } else if (result.ok) {
-    p.log.info("Remote list empty — enter models manually.");
-  } else {
-    p.log.warn("Falling back to manual model entry.");
   }
 
   for (;;) {

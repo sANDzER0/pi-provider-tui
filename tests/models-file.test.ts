@@ -10,6 +10,8 @@ import {
   removeProvider,
   maskKey,
   restoreFromBackup,
+  normalizeProvider,
+  normalizeProviders,
 } from "../src/models-file.ts";
 import { defaultModel } from "../src/types.ts";
 import type { ModelsFile, ProviderConfig } from "../src/types.ts";
@@ -63,6 +65,53 @@ describe("loadModelsFile", () => {
     const doc = await loadModelsFile(p);
     assert.equal(doc.futureField, 1);
     assert.ok(doc.providers.a);
+  });
+
+  it("normalizes providers missing models on load", async () => {
+    const dir = await tempDir();
+    const p = path.join(dir, "models.json");
+    await fs.writeFile(
+      p,
+      JSON.stringify({
+        providers: {
+          broken: {
+            baseUrl: "https://ex.com/v1",
+            api: "openai-completions",
+          },
+        },
+      }),
+      "utf8",
+    );
+    const doc = await loadModelsFile(p);
+    assert.ok(Array.isArray(doc.providers.broken.models));
+    assert.deepEqual(doc.providers.broken.models, []);
+    assert.equal(doc.providers.broken.baseUrl, "https://ex.com/v1");
+  });
+});
+
+describe("normalizeProvider", () => {
+  it("defaults missing models to [] and baseUrl to string", () => {
+    const p = normalizeProvider({ api: "openai-completions" });
+    assert.deepEqual(p.models, []);
+    assert.equal(p.baseUrl, "");
+    assert.equal(p.api, "openai-completions");
+  });
+
+  it("keeps invalid api string but still sets models array", () => {
+    const p = normalizeProvider({
+      api: "custom-api",
+      models: "not-array",
+      baseUrl: "https://x",
+    });
+    assert.equal(p.api, "custom-api");
+    assert.deepEqual(p.models, []);
+    assert.equal(p.baseUrl, "https://x");
+  });
+
+  it("normalizeProviders maps all entries", () => {
+    const out = normalizeProviders({ a: {}, b: { models: [{ id: "m" }] } });
+    assert.deepEqual(out.a.models, []);
+    assert.equal(out.b.models.length, 1);
   });
 });
 

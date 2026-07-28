@@ -15,19 +15,20 @@ export async function testProviderScreen(doc: ModelsFile): Promise<void> {
   });
   if (handleCancel(id)) return;
   const provider = doc.providers[String(id)];
-  if (!provider.models.length) {
+  const models = provider.models ?? [];
+  if (!models.length) {
     p.log.error("Provider has no models.");
     return;
   }
   const modelId = await p.select({
     message: "Model",
-    options: provider.models.map((m) => ({
+    options: models.map((m) => ({
       value: m.id,
       label: m.name === m.id ? m.id : `${m.name} (${m.id})`,
     })),
   });
   if (handleCancel(modelId)) return;
-  const model = provider.models.find((m) => m.id === String(modelId))!;
+  const model = models.find((m) => m.id === String(modelId))!;
 
   const spinner = p.spinner();
   spinner.start("Testing connection…");
