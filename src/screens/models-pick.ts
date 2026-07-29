@@ -3,35 +3,130 @@ import { fetchRemoteModels } from "../fetch-models.js";
 import { defaultModel, type ApiType, type ModelConfig } from "../types.js";
 import { handleCancel } from "../ui-cancel.js";
 
-/** Ask which selected models support reasoning (writes reasoning: true/false). */
-export async function applyReasoningFlags(
+function positiveNumberValidate(v: string | undefined): string | undefined {
+  return v && Number.isFinite(Number(v)) && Number(v) > 0
+    ? undefined
+    : "Positive number required";
+}
+
+async function promptReasoning(
+  message: string,
+  initial: boolean,
+): Promise<boolean | null> {
+  const reasoningSel = await p.select({
+    message,
+    options: [
+      { value: "yes", label: "Yes (reasoning: true)" },
+      { value: "no", label: "No (reasoning: false)" },
+    ],
+    initialValue: initial ? "yes" : "no",
+  });
+  if (handleCancel(reasoningSel)) return null;
+  return reasoningSel === "yes";
+}
+
+async function promptLimits(
+  label: string,
+  defaults: { contextWindow: number; maxTokens: number },
+): Promise<{ contextWindow: number; maxTokens: number } | null> {
+  const contextWindowRaw = await p.text({
+    message: `${label} contextWindow (context length)`,
+    initialValue: String(defaults.contextWindow),
+    validate: positiveNumberValidate,
+  });
+  if (handleCancel(contextWindowRaw)) return null;
+
+  const maxTokensRaw = await p.text({
+    message: `${label} maxTokens (max output length)`,
+    initialValue: String(defaults.maxTokens),
+    validate: positiveNumberValidate,
+  });
+  if (handleCancel(maxTokensRaw)) return null;
+
+  return {
+    contextWindow: Number(contextWindowRaw),
+    maxTokens: Number(maxTokensRaw),
+  };
+}
+
+/**
+ * After remote multiselect: set reasoning + contextWindow + maxTokens per model.
+ * Multi-select can share one limit set, or configure each model individually.
+ */
+export async function configureSelectedModels(
   models: ModelConfig[],
 ): Promise<ModelConfig[] | null> {
   if (models.length === 0) return models;
 
   if (models.length === 1) {
     const m = models[0];
-    const reasoning = await p.confirm({
-      message: `Does "${m.id}" support reasoning/thinking?`,
-      initialValue: m.reasoning,
+    const reasoning = await promptReasoning(
+      `Does "${m.id}" support reasoning/thinking?`,
+      m.reasoning,
+    );
+    if (reasoning === null) return null;
+    const limits = await promptLimits(`"${m.id}"`, {
+      contextWindow: m.contextWindow,
+      maxTokens: m.maxTokens,
     });
-    if (handleCancel(reasoning)) return null;
-    return [{ ...m, reasoning: reasoning === true }];
+    if (limits === null) return null;
+    return [{ ...m, reasoning, ...limits }];
   }
 
-  const marked = await p.multiselect({
-    message:
-      "Which support reasoning/thinking? (Space toggle, Enter confirm — leave empty if none)",
-    options: models.map((m) => ({
-      value: m.id,
-      label: m.name === m.id ? m.id : `${m.name} (${m.id})`,
-    })),
-    required: false,
-    initialValues: models.filter((m) => m.reasoning).map((m) => m.id),
+  const mode = await p.select({
+    message: `Configure ${models.length} selected models`,
+    options: [
+      {
+        value: "shared",
+        label: "Same reasoning + limits for all",
+      },
+      {
+        value: "each",
+        label: "Configure each model separately",
+      },
+    ],
+    initialValue: "each",
   });
-  if (handleCancel(marked)) return null;
-  const set = new Set(marked as string[]);
-  return models.map((m) => ({ ...m, reasoning: set.has(m.id) }));
+  if (handleCancel(mode)) return null;
+
+  if (mode === "shared") {
+    const reasoning = await promptReasoning(
+      "Do all selected models support reasoning/thinking?",
+      models.some((m) => m.reasoning),
+    );
+    if (reasoning === null) return null;
+    const limits = await promptLimits("All models", {
+      contextWindow: models[0].contextWindow,
+      maxTokens: models[0].maxTokens,
+    });
+    if (limits === null) return null;
+    return models.map((m) => ({ ...m, reasoning, ...limits }));
+  }
+
+  const out: ModelConfig[] = [];
+  for (let i = 0; i < models.length; i++) {
+    const m = models[i];
+    p.log.step(`Model ${i + 1}/${models.length}: ${m.id}`);
+    const reasoning = await promptReasoning(
+      `Does "${m.id}" support reasoning/thinking?`,
+      m.reasoning,
+    );
+    if (reasoning === null) return null;
+    const limits = await promptLimits(`"${m.id}"`, {
+      contextWindow: m.contextWindow,
+      maxTokens: m.maxTokens,
+    });
+    if (limits === null) return null;
+    out.push({ ...m, reasoning, ...limits });
+  }
+  return out;
+}
+
+/** @deprecated use configureSelectedModels — kept name for clarity in older call sites */
+export async function applyReasoningFlags(
+  models: ModelConfig[],
+): Promise<ModelConfig[] | null> {
+  return configureSelectedModels(models);
 }
 
 export async function manualModels(): Promise<ModelConfig[] | null> {
@@ -49,45 +144,25 @@ export async function manualModels(): Promise<ModelConfig[] | null> {
     });
     if (handleCancel(name)) return null;
 
-    // Use select so Yes/No is unambiguous (confirm + Enter on default No was easy to miss)
-    const reasoningSel = await p.select({
-      message: "Supports reasoning/thinking?",
-      options: [
-        { value: "yes", label: "Yes (reasoning: true)" },
-        { value: "no", label: "No (reasoning: false)" },
-      ],
-      initialValue: "no",
-    });
-    if (handleCancel(reasoningSel)) return null;
-    const reasoning = reasoningSel === "yes";
+    const reasoning = await promptReasoning(
+      "Supports reasoning/thinking?",
+      false,
+    );
+    if (reasoning === null) return null;
 
-    const contextWindowRaw = await p.text({
-      message: "contextWindow",
-      initialValue: "128000",
-      validate: (v) =>
-        v && Number.isFinite(Number(v)) && Number(v) > 0
-          ? undefined
-          : "Positive number required",
+    const limits = await promptLimits("Model", {
+      contextWindow: 128000,
+      maxTokens: 16384,
     });
-    if (handleCancel(contextWindowRaw)) return null;
-
-    const maxTokensRaw = await p.text({
-      message: "maxTokens",
-      initialValue: "16384",
-      validate: (v) =>
-        v && Number.isFinite(Number(v)) && Number(v) > 0
-          ? undefined
-          : "Positive number required",
-    });
-    if (handleCancel(maxTokensRaw)) return null;
+    if (limits === null) return null;
 
     models.push(
       defaultModel({
         id: String(id).trim(),
         name: String(name || id).trim() || String(id).trim(),
         reasoning,
-        contextWindow: Number(contextWindowRaw),
-        maxTokens: Number(maxTokensRaw),
+        contextWindow: limits.contextWindow,
+        maxTokens: limits.maxTokens,
       }),
     );
 
@@ -150,7 +225,7 @@ export async function pickModels(opts: {
         const chosen = ids
           .map((id) => byId.get(id))
           .filter((m): m is ModelConfig => Boolean(m));
-        return applyReasoningFlags(chosen);
+        return configureSelectedModels(chosen);
       }
       p.log.info("No models selected — enter manually.");
     } else if (result.ok) {
