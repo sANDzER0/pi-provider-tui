@@ -129,42 +129,87 @@ export async function applyReasoningFlags(
   return configureSelectedModels(models);
 }
 
+/** Prompt for one new model (manual). */
+export async function promptNewModel(): Promise<ModelConfig | null> {
+  const id = await p.text({
+    message: "Model id",
+    validate: (v) => (v && v.trim() ? undefined : "Required"),
+  });
+  if (handleCancel(id)) return null;
+
+  const name = await p.text({
+    message: "Model name (Enter = id)",
+    placeholder: String(id),
+  });
+  if (handleCancel(name)) return null;
+
+  const reasoning = await promptReasoning(
+    "Supports reasoning/thinking?",
+    false,
+  );
+  if (reasoning === null) return null;
+
+  const limits = await promptLimits("Model", {
+    contextWindow: 128000,
+    maxTokens: 16384,
+  });
+  if (limits === null) return null;
+
+  return defaultModel({
+    id: String(id).trim(),
+    name: String(name || id).trim() || String(id).trim(),
+    reasoning,
+    contextWindow: limits.contextWindow,
+    maxTokens: limits.maxTokens,
+  });
+}
+
+/** Edit fields of an existing model (id can be changed). */
+export async function editOneModel(
+  existing: ModelConfig,
+): Promise<ModelConfig | null> {
+  const id = await p.text({
+    message: "Model id",
+    initialValue: existing.id,
+    validate: (v) => (v && v.trim() ? undefined : "Required"),
+  });
+  if (handleCancel(id)) return null;
+
+  const name = await p.text({
+    message: "Model name",
+    initialValue: existing.name,
+  });
+  if (handleCancel(name)) return null;
+
+  const reasoning = await promptReasoning(
+    "Supports reasoning/thinking?",
+    existing.reasoning,
+  );
+  if (reasoning === null) return null;
+
+  const limits = await promptLimits(`"${String(id).trim()}"`, {
+    contextWindow: existing.contextWindow,
+    maxTokens: existing.maxTokens,
+  });
+  if (limits === null) return null;
+
+  return defaultModel({
+    id: String(id).trim(),
+    name: String(name || id).trim() || String(id).trim(),
+    reasoning,
+    contextWindow: limits.contextWindow,
+    maxTokens: limits.maxTokens,
+    input: existing.input,
+    cost: existing.cost,
+  });
+}
+
 export async function manualModels(): Promise<ModelConfig[] | null> {
   const models: ModelConfig[] = [];
   for (;;) {
-    const id = await p.text({
-      message: "Model id",
-      validate: (v) => (v && v.trim() ? undefined : "Required"),
-    });
-    if (handleCancel(id)) return null;
-
-    const name = await p.text({
-      message: "Model name (Enter = id)",
-      placeholder: String(id),
-    });
-    if (handleCancel(name)) return null;
-
-    const reasoning = await promptReasoning(
-      "Supports reasoning/thinking?",
-      false,
-    );
-    if (reasoning === null) return null;
-
-    const limits = await promptLimits("Model", {
-      contextWindow: 128000,
-      maxTokens: 16384,
-    });
-    if (limits === null) return null;
-
-    models.push(
-      defaultModel({
-        id: String(id).trim(),
-        name: String(name || id).trim() || String(id).trim(),
-        reasoning,
-        contextWindow: limits.contextWindow,
-        maxTokens: limits.maxTokens,
-      }),
-    );
+    const one = await promptNewModel();
+    if (one === null) return null;
+    models.push(one);
 
     const again = await p.confirm({
       message: "Add another model?",
