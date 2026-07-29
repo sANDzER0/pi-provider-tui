@@ -1,5 +1,5 @@
 {
-  "name": "@sANDzER0/pi-provider-tui",
+  "name": "@sandzer0/pi-provider-tui",
   "version": "0.1.0",
   "description": "Interactive TUI to manage Pi coding agent custom model providers in ~/.pi/agent/models.json",
   "type": "module",
@@ -31,16 +31,16 @@
     "openai",
     "anthropic"
   ],
-  "author": "sANDzER0",
+  "author": "sandzer0",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sANDzER0/pi-provider-tui.git"
+    "url": "git+https://github.com/sandzer0/pi-provider-tui.git"
   },
   "bugs": {
-    "url": "https://github.com/sANDzER0/pi-provider-tui/issues"
+    "url": "https://github.com/sandzer0/pi-provider-tui/issues"
   },
-  "homepage": "https://github.com/sANDzER0/pi-provider-tui#readme",
+  "homepage": "https://github.com/sandzer0/pi-provider-tui#readme",
   "publishConfig": {
     "access": "public"
   },

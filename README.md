@@ -1,4 +1,4 @@
-# @sANDzER0/pi-provider-tui
+# @sandzer0/pi-provider-tui
 
 Interactive TUI to manage [Pi](https://pi.dev) custom model providers in `~/.pi/agent/models.json`.
 
@@ -10,19 +10,19 @@ Interactive TUI to manage [Pi](https://pi.dev) custom model providers in `~/.pi/
 ## Install
 
 ```bash
-npm install -g @sANDzER0/pi-provider-tui
+npm install -g @sandzer0/pi-provider-tui
 ```
 
 Or run once without global install:
 
 ```bash
-npx @sANDzER0/pi-provider-tui
+npx @sandzer0/pi-provider-tui
 ```
 
 From source:
 
 ```bash
-git clone https://github.com/sANDzER0/pi-provider-tui.git
+git clone https://github.com/sandzer0/pi-provider-tui.git
 cd pi-provider-tui
 npm install
 npm run build
