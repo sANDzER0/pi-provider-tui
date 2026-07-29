@@ -52,6 +52,8 @@ export function parseModelsPayload(payload: unknown): {
       defaultModel({
         id: row.id,
         name: typeof row.name === "string" ? row.name : undefined,
+        reasoning:
+          typeof row.reasoning === "boolean" ? row.reasoning : undefined,
         contextWindow:
           typeof row.context_window === "number"
             ? row.context_window

@@ -54,7 +54,13 @@ describe("parseModelsPayload", () => {
   it("parses { data: [...] }", () => {
     const { models, skipped } = parseModelsPayload({
       data: [
-        { id: "a", name: "A", context_window: 1000, max_tokens: 200 },
+        {
+          id: "a",
+          name: "A",
+          context_window: 1000,
+          max_tokens: 200,
+          reasoning: true,
+        },
         { id: "b" },
         { noid: true },
       ],
@@ -65,7 +71,9 @@ describe("parseModelsPayload", () => {
     assert.equal(models[0].name, "A");
     assert.equal(models[0].contextWindow, 1000);
     assert.equal(models[0].maxTokens, 200);
+    assert.equal(models[0].reasoning, true);
     assert.equal(models[1].name, "b");
+    assert.equal(models[1].reasoning, false);
   });
 
   it("parses { models: [...] } and bare array", () => {
