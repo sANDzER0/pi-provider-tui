@@ -1,25 +1,32 @@
-# pi-provider-tui
+# @sANDzER0/pi-provider-tui
 
 Interactive TUI to manage [Pi](https://pi.dev) custom model providers in `~/.pi/agent/models.json`.
 
 ## Requirements
 
 - Node.js 18+
-- Pi coding agent installed (to consume the config)
+- [Pi coding agent](https://pi.dev) installed (to consume the config)
 
 ## Install
 
 ```bash
-cd /path/to/pi-provider-tui
+npm install -g @sANDzER0/pi-provider-tui
+```
+
+Or run once without global install:
+
+```bash
+npx @sANDzER0/pi-provider-tui
+```
+
+From source:
+
+```bash
+git clone https://github.com/sANDzER0/pi-provider-tui.git
+cd pi-provider-tui
 npm install
 npm run build
 npm link
-```
-
-Dev without build:
-
-```bash
-npm run dev
 ```
 
 ## Usage
@@ -34,13 +41,15 @@ Override config path:
 PI_MODELS_PATH=/tmp/models.json pi-provider-tui
 ```
 
-Menu: List / Add / Edit / Remove / Test connection / Quit.
+**Main menu:** List / Add / Edit / Remove / Test connection / Quit
 
-Supported API types:
+**Supported API types:**
 
 - `openai-completions`
 - `openai-responses`
 - `anthropic-messages`
+
+**Edit → models** supports: list, add (manual or from gateway), edit one, remove, replace all.
 
 After saving, verify:
 
@@ -56,9 +65,15 @@ API keys are stored **in plaintext** in `models.json` by design. The tool sets f
 
 Each write copies the previous file to `models.json.bak`. On corrupt JSON at startup, the TUI offers restore from `.bak`.
 
-## Tests
+## Development
 
 ```bash
+npm install
 npm test
 npm run typecheck
+npm run dev
 ```
+
+## License
+
+MIT

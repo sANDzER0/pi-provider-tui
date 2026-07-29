@@ -1,20 +1,48 @@
 {
-  "name": "pi-provider-tui",
+  "name": "@sANDzER0/pi-provider-tui",
   "version": "0.1.0",
-  "private": true,
+  "description": "Interactive TUI to manage Pi coding agent custom model providers in ~/.pi/agent/models.json",
   "type": "module",
   "bin": {
     "pi-provider-tui": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "tsx --test tests/**/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test"
   },
   "engines": {
     "node": ">=18"
+  },
+  "keywords": [
+    "pi",
+    "pi-coding-agent",
+    "tui",
+    "llm",
+    "models.json",
+    "provider",
+    "openai",
+    "anthropic"
+  ],
+  "author": "sANDzER0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sANDzER0/pi-provider-tui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sANDzER0/pi-provider-tui/issues"
+  },
+  "homepage": "https://github.com/sANDzER0/pi-provider-tui#readme",
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@clack/prompts": "^0.10.0"

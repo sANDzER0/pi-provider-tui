@@ -1,0 +1,10 @@
+import { type ModelsFile, type ProviderConfig } from "./types.js";
+export declare function getModelsPath(): string;
+export declare function maskKey(key: string | undefined): string;
+export declare function normalizeProvider(raw: unknown): ProviderConfig;
+export declare function normalizeProviders(providers: Record<string, unknown>): Record<string, ProviderConfig>;
+export declare function loadModelsFile(filePath?: string): Promise<ModelsFile>;
+export declare function saveModelsFile(doc: ModelsFile, filePath?: string): Promise<void>;
+export declare function restoreFromBackup(filePath?: string): Promise<ModelsFile>;
+export declare function upsertProvider(doc: ModelsFile, id: string, provider: ProviderConfig): ModelsFile;
+export declare function removeProvider(doc: ModelsFile, id: string): ModelsFile;
