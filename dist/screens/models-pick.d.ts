@@ -1,4 +1,10 @@
-import { type ApiType, type ModelConfig } from "../types.js";
+import { type ApiType, type ModelConfig, type ThinkingLevelMap } from "../types.js";
+/**
+ * Prompt the user to configure a thinkingLevelMap for a reasoning model.
+ * Returns `ThinkingLevelMap | undefined` (undefined = omit the field),
+ * or `null` on cancel.
+ */
+export declare function promptThinkingLevelMap(existing?: ThinkingLevelMap): Promise<ThinkingLevelMap | undefined | null>;
 /**
  * After remote multiselect: set reasoning + contextWindow + maxTokens per model.
  * Multi-select can share one limit set, or configure each model individually.

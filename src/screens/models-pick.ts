@@ -1,7 +1,87 @@
 import * as p from "@clack/prompts";
 import { fetchRemoteModels } from "../fetch-models.js";
-import { defaultModel, type ApiType, type ModelConfig } from "../types.js";
+import {
+  defaultModel,
+  THINKING_LEVELS,
+  THINKING_PRESETS,
+  type ApiType,
+  type ModelConfig,
+  type ThinkingLevelMap,
+} from "../types.js";
 import { handleCancel } from "../ui-cancel.js";
+
+/**
+ * Prompt the user to configure a thinkingLevelMap for a reasoning model.
+ * Returns `ThinkingLevelMap | undefined` (undefined = omit the field),
+ * or `null` on cancel.
+ */
+export async function promptThinkingLevelMap(
+  existing?: ThinkingLevelMap,
+): Promise<ThinkingLevelMap | undefined | null> {
+  // Build preset options, plus a "custom" entry.
+  const presetOptions = THINKING_PRESETS.map((preset) => ({
+    value: preset.id,
+    label: preset.label,
+    hint: preset.hint,
+  }));
+
+  const sel = await p.select({
+    message: "思考档位 (thinking level map)",
+    options: [...presetOptions, { value: "custom", label: "自定义档位…", hint: "逐个配置每个思考级别的保留/禁用" }],
+  });
+  if (handleCancel(sel)) return null;
+
+  if (sel !== "custom") {
+    const preset = THINKING_PRESETS.find((pr) => pr.id === sel);
+    return preset?.map; // may be undefined ("default" preset)
+  }
+
+  // --- Custom: configure each level ---
+  p.log.info("对每个级别选择: 保留(发送该值) 或 禁用(隐藏该档位)。空回车 = 使用默认。");
+  const map: ThinkingLevelMap = {};
+  for (const level of THINKING_LEVELS) {
+    const existingVal = existing?.[level];
+    const initialHint =
+      existingVal === null
+        ? "disabled"
+        : existingVal === undefined
+          ? "default"
+          : existingVal;
+
+    const choice = await p.select({
+      message: `级别 "${level}" (当前: ${initialHint})`,
+      options: [
+        { value: "keep", label: `保留 — 发送 "${level}"`, hint: "该档位可用" },
+        { value: "disable", label: "禁用 — 设为 null", hint: "隐藏/跳过该档位" },
+        { value: "default", label: "默认 — 省略该级别", hint: "由 pi 自动处理" },
+      ],
+    });
+    if (handleCancel(choice)) return null;
+
+    if (choice === "keep") {
+      map[level] = String(level);
+    } else if (choice === "disable") {
+      map[level] = null;
+    }
+    // "default" → don't add the key (omitted)
+  }
+
+  // If the custom map is empty (all defaults), return undefined to omit.
+  if (Object.keys(map).length === 0) return undefined;
+  return map;
+}
+
+/**
+ * Convenience: if `reasoning` is true, ask for thinkingLevelMap.
+ * Returns the map (or undefined), or null on cancel.
+ */
+async function maybePromptThinkingLevelMap(
+  reasoning: boolean,
+  existing?: ThinkingLevelMap,
+): Promise<ThinkingLevelMap | undefined | null> {
+  if (!reasoning) return undefined;
+  return promptThinkingLevelMap(existing);
+}
 
 function positiveNumberValidate(v: string | undefined): string | undefined {
   return v && Number.isFinite(Number(v)) && Number(v) > 0
@@ -65,12 +145,14 @@ export async function configureSelectedModels(
       m.reasoning,
     );
     if (reasoning === null) return null;
+    const tlm = await maybePromptThinkingLevelMap(reasoning, m.thinkingLevelMap);
+    if (tlm === null) return null;
     const limits = await promptLimits(`"${m.id}"`, {
       contextWindow: m.contextWindow,
       maxTokens: m.maxTokens,
     });
     if (limits === null) return null;
-    return [{ ...m, reasoning, ...limits }];
+    return [{ ...m, reasoning, thinkingLevelMap: tlm, ...limits }];
   }
 
   const mode = await p.select({
@@ -95,12 +177,14 @@ export async function configureSelectedModels(
       models.some((m) => m.reasoning),
     );
     if (reasoning === null) return null;
+    const tlm = await maybePromptThinkingLevelMap(reasoning, models[0]?.thinkingLevelMap);
+    if (tlm === null) return null;
     const limits = await promptLimits("All models", {
       contextWindow: models[0].contextWindow,
       maxTokens: models[0].maxTokens,
     });
     if (limits === null) return null;
-    return models.map((m) => ({ ...m, reasoning, ...limits }));
+    return models.map((m) => ({ ...m, reasoning, thinkingLevelMap: tlm, ...limits }));
   }
 
   const out: ModelConfig[] = [];
@@ -112,12 +196,14 @@ export async function configureSelectedModels(
       m.reasoning,
     );
     if (reasoning === null) return null;
+    const tlm = await maybePromptThinkingLevelMap(reasoning, m.thinkingLevelMap);
+    if (tlm === null) return null;
     const limits = await promptLimits(`"${m.id}"`, {
       contextWindow: m.contextWindow,
       maxTokens: m.maxTokens,
     });
     if (limits === null) return null;
-    out.push({ ...m, reasoning, ...limits });
+    out.push({ ...m, reasoning, thinkingLevelMap: tlm, ...limits });
   }
   return out;
 }
@@ -149,6 +235,9 @@ export async function promptNewModel(): Promise<ModelConfig | null> {
   );
   if (reasoning === null) return null;
 
+  const tlm = await maybePromptThinkingLevelMap(reasoning);
+  if (tlm === null) return null;
+
   const limits = await promptLimits("Model", {
     contextWindow: 128000,
     maxTokens: 16384,
@@ -159,6 +248,7 @@ export async function promptNewModel(): Promise<ModelConfig | null> {
     id: String(id).trim(),
     name: String(name || id).trim() || String(id).trim(),
     reasoning,
+    thinkingLevelMap: tlm,
     contextWindow: limits.contextWindow,
     maxTokens: limits.maxTokens,
   });
@@ -187,6 +277,9 @@ export async function editOneModel(
   );
   if (reasoning === null) return null;
 
+  const tlm = await maybePromptThinkingLevelMap(reasoning, existing.thinkingLevelMap);
+  if (tlm === null) return null;
+
   const limits = await promptLimits(`"${String(id).trim()}"`, {
     contextWindow: existing.contextWindow,
     maxTokens: existing.maxTokens,
@@ -197,6 +290,7 @@ export async function editOneModel(
     id: String(id).trim(),
     name: String(name || id).trim() || String(id).trim(),
     reasoning,
+    thinkingLevelMap: tlm,
     contextWindow: limits.contextWindow,
     maxTokens: limits.maxTokens,
     input: existing.input,

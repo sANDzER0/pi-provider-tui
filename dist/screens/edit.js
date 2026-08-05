@@ -1,6 +1,6 @@
 import * as p from "@clack/prompts";
 import { maskKey, upsertProvider } from "../models-file.js";
-import { API_TYPES, defaultAuthHeader, } from "../types.js";
+import { API_TYPES, defaultAuthHeader, summarizeThinkingLevelMap, } from "../types.js";
 import { handleCancel } from "../ui-cancel.js";
 import { editOneModel, manualModels, pickModels, promptNewModel, } from "./models-pick.js";
 function isUrl(s) {
@@ -16,9 +16,11 @@ function modelLabel(m) {
     const bits = [
         m.name === m.id ? m.id : `${m.name} (${m.id})`,
         m.reasoning ? "reasoning" : "no-reasoning",
-        `ctx=${m.contextWindow}`,
-        `out=${m.maxTokens}`,
     ];
+    if (m.reasoning) {
+        bits.push(`thinking=${summarizeThinkingLevelMap(m.thinkingLevelMap)}`);
+    }
+    bits.push(`ctx=${m.contextWindow}`, `out=${m.maxTokens}`);
     return bits.join(" · ");
 }
 function listModelsNote(models) {

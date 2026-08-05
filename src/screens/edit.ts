@@ -3,6 +3,7 @@ import { maskKey, upsertProvider } from "../models-file.js";
 import {
   API_TYPES,
   defaultAuthHeader,
+  summarizeThinkingLevelMap,
   type ApiType,
   type ModelConfig,
   type ModelsFile,
@@ -29,9 +30,11 @@ function modelLabel(m: ModelConfig): string {
   const bits = [
     m.name === m.id ? m.id : `${m.name} (${m.id})`,
     m.reasoning ? "reasoning" : "no-reasoning",
-    `ctx=${m.contextWindow}`,
-    `out=${m.maxTokens}`,
   ];
+  if (m.reasoning) {
+    bits.push(`thinking=${summarizeThinkingLevelMap(m.thinkingLevelMap)}`);
+  }
+  bits.push(`ctx=${m.contextWindow}`, `out=${m.maxTokens}`);
   return bits.join(" · ");
 }
 
