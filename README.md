@@ -51,6 +51,13 @@ PI_MODELS_PATH=/tmp/models.json pi-provider-tui
 
 **Edit → models** supports: list, add (manual or from gateway), edit one, remove, replace all.
 
+**Secrets:** `apiKey` accepts pi's value-resolution forms — a literal (`sk-...`), an environment reference (`$MY_KEY` or `${MY_KEY}`), or a command (`!op read ...`). References are resolved at request time by pi and by this tool when testing; the raw value is stored in `models.json` untouched.
+
+**Test connection** has two modes:
+
+- *Endpoint + auth check* — `GET {baseUrl}/models`, no tokens used
+- *Full request* — tiny completion per API type (may cost tokens)
+
 After saving, verify:
 
 ```bash

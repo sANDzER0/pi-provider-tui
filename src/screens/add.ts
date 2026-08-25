@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import { maskKey, upsertProvider } from "../models-file.js";
+import { isReferenceValue } from "../env-resolve.js";
 import {
   API_TYPES,
   defaultAuthHeader,
@@ -60,12 +61,14 @@ export async function addProvider(
   const api = apiSel as ApiType;
 
   const apiKeyRaw = await p.text({
-    message: "apiKey (plaintext; empty allowed)",
-    placeholder: "sk-...",
+    message: "apiKey (empty allowed; $VAR / !command references supported)",
+    placeholder: "sk-... | $MY_API_KEY | !op read 'op://vault/key'",
   });
   if (handleCancel(apiKeyRaw)) return null;
   const apiKey = String(apiKeyRaw ?? "").trim();
-  if (!apiKey) {
+  if (apiKey && isReferenceValue(apiKey)) {
+    p.log.info("Reference value — resolved at request time by pi and this tool.");
+  } else if (!apiKey) {
     p.log.warn("Empty apiKey — models may be unavailable in pi /model until auth is set.");
   }
 

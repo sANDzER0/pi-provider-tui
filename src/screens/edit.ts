@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { maskKey, upsertProvider } from "../models-file.js";
+import { maskKey, removeProvider, upsertProvider } from "../models-file.js";
 import {
   API_TYPES,
   defaultAuthHeader,
@@ -230,7 +230,8 @@ export async function editProvider(
     options: ids.map((i) => ({ value: i, label: i })),
   });
   if (handleCancel(idSel)) return null;
-  const id = String(idSel);
+  const originalId = String(idSel);
+  let id = originalId;
   const existing = doc.providers[id];
   let provider: ProviderConfig = {
     ...existing,
@@ -241,6 +242,7 @@ export async function editProvider(
     const field = await p.select({
       message: `Editing "${id}" — choose field`,
       options: [
+        { value: "rename", label: `rename id (${id})` },
         { value: "name", label: `name (${provider.name ?? id})` },
         { value: "baseUrl", label: `baseUrl (${provider.baseUrl})` },
         { value: "api", label: `api (${provider.api})` },
@@ -269,7 +271,28 @@ export async function editProvider(
           initialValue: true,
         });
         if (handleCancel(ok) || !ok) return null;
-        return upsertProvider(doc, id, provider);
+        let next = upsertProvider(doc, id, provider);
+        if (id !== originalId) {
+          next = removeProvider(next, originalId);
+        }
+        return next;
+      }
+      case "rename": {
+        const v = await p.text({
+          message: "New provider id",
+          initialValue: id,
+          validate: (x) => (x && x.trim() ? undefined : "Required"),
+        });
+        if (handleCancel(v)) return null;
+        const newId = String(v).trim();
+        if (newId === id) break;
+        if (doc.providers[newId]) {
+          p.log.error(`Provider "${newId}" already exists.`);
+          break;
+        }
+        p.log.success(`Will save as "${newId}" on write.`);
+        id = newId;
+        break;
       }
       case "name": {
         const v = await p.text({

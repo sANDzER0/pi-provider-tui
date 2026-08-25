@@ -53,14 +53,14 @@ export interface ThinkingPreset {
 export const THINKING_PRESETS: ThinkingPreset[] = [
   {
     id: "default",
-    label: "保留默认 (omit thinkingLevelMap)",
-    hint: "不写入 thinkingLevelMap，由 pi 自动映射所有标准档位",
+    label: "Keep defaults (omit thinkingLevelMap)",
+    hint: "Don't write the field; pi maps all standard levels automatically",
     map: undefined,
   },
   {
     id: "all",
-    label: "保留全部档位",
-    hint: "off / minimal / low / medium / high / xhigh / max 全部可用",
+    label: "All levels enabled",
+    hint: "off / minimal / low / medium / high / xhigh / max all available",
     map: {
       off: "off",
       minimal: "minimal",
@@ -73,8 +73,8 @@ export const THINKING_PRESETS: ThinkingPreset[] = [
   },
   {
     id: "standard",
-    label: "仅标准档位 (off / high / max)",
-    hint: "隐藏 minimal / low / medium / xhigh，保留 off / high / max",
+    label: "Standard only (off / high / max)",
+    hint: "Hide minimal / low / medium / xhigh; keep off / high / max",
     map: {
       off: "off",
       minimal: null,
@@ -87,8 +87,8 @@ export const THINKING_PRESETS: ThinkingPreset[] = [
   },
   {
     id: "always-on",
-    label: "无法关闭 (always thinking)",
-    hint: "off 设为不支持，其余档位保留默认",
+    label: "Always thinking (cannot disable)",
+    hint: "Mark off as unsupported; keep default mapping for the rest",
     map: {
       off: null,
       minimal: "minimal",

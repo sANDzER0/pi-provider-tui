@@ -1,6 +1,6 @@
 {
   "name": "@sandzer0/pi-provider-tui",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Interactive TUI to manage Pi coding agent custom model providers in ~/.pi/agent/models.json",
   "type": "module",
   "bin": {

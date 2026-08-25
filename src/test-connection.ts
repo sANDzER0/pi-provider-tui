@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from "./fetch-models.js";
+import { isReferenceValue, resolveValue } from "./env-resolve.js";
 import { fetchWithTimeout, DEFAULT_FETCH_TIMEOUT_MS } from "./http.js";
 import type { ModelConfig, ProviderConfig } from "./types.js";
 
@@ -18,7 +19,16 @@ export async function testConnection(opts: {
   const fetchFn = opts.fetchImpl ?? fetch;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
   const { provider, model } = opts;
-  const auth = buildAuthHeaders(provider.api, provider.apiKey);
+
+  // Resolve $VAR / !command references before use (pi does the same at request time).
+  let rawKey = provider.apiKey;
+  if (rawKey && isReferenceValue(rawKey)) {
+    const res = await resolveValue(rawKey);
+    if (!res.ok) return { ok: false, detail: res.error };
+    rawKey = res.value;
+  }
+
+  const auth = buildAuthHeaders(provider.api, rawKey);
   // When authHeader is explicitly false, still send provider-specific keys
   // from buildAuthHeaders for anthropic; for openai, omit Bearer if authHeader false.
   let headers: Record<string, string> = {

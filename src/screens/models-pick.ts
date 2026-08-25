@@ -1,11 +1,13 @@
 import * as p from "@clack/prompts";
 import { fetchRemoteModels } from "../fetch-models.js";
+import { guessReasoning } from "../heuristics.js";
 import {
   defaultModel,
   THINKING_LEVELS,
   THINKING_PRESETS,
   type ApiType,
   type ModelConfig,
+  type ModelCost,
   type ThinkingLevelMap,
 } from "../types.js";
 import { handleCancel } from "../ui-cancel.js";
@@ -26,8 +28,15 @@ export async function promptThinkingLevelMap(
   }));
 
   const sel = await p.select({
-    message: "思考档位 (thinking level map)",
-    options: [...presetOptions, { value: "custom", label: "自定义档位…", hint: "逐个配置每个思考级别的保留/禁用" }],
+    message: "Thinking level map",
+    options: [
+      ...presetOptions,
+      {
+        value: "custom",
+        label: "Customize levels…",
+        hint: "Configure each thinking level individually",
+      },
+    ],
   });
   if (handleCancel(sel)) return null;
 
@@ -37,7 +46,9 @@ export async function promptThinkingLevelMap(
   }
 
   // --- Custom: configure each level ---
-  p.log.info("对每个级别选择: 保留(发送该值) 或 禁用(隐藏该档位)。空回车 = 使用默认。");
+  p.log.info(
+    "For each level choose: keep (send this value), disable (hide it), or default (omit).",
+  );
   const map: ThinkingLevelMap = {};
   for (const level of THINKING_LEVELS) {
     const existingVal = existing?.[level];
@@ -49,11 +60,11 @@ export async function promptThinkingLevelMap(
           : existingVal;
 
     const choice = await p.select({
-      message: `级别 "${level}" (当前: ${initialHint})`,
+      message: `Level "${level}" (current: ${initialHint})`,
       options: [
-        { value: "keep", label: `保留 — 发送 "${level}"`, hint: "该档位可用" },
-        { value: "disable", label: "禁用 — 设为 null", hint: "隐藏/跳过该档位" },
-        { value: "default", label: "默认 — 省略该级别", hint: "由 pi 自动处理" },
+        { value: "keep", label: `Keep — send "${level}"`, hint: "level available" },
+        { value: "disable", label: "Disable — set to null", hint: "hide/skip this level" },
+        { value: "default", label: "Default — omit", hint: "let pi decide" },
       ],
     });
     if (handleCancel(choice)) return null;
@@ -87,6 +98,97 @@ function positiveNumberValidate(v: string | undefined): string | undefined {
   return v && Number.isFinite(Number(v)) && Number(v) > 0
     ? undefined
     : "Positive number required";
+}
+
+function nonNegativeNumberValidate(v: string | undefined): string | undefined {
+  return v && Number.isFinite(Number(v)) && Number(v) >= 0
+    ? undefined
+    : "Non-negative number required";
+}
+
+function isZeroCost(cost: ModelCost | undefined): boolean {
+  if (!cost) return true;
+  return (
+    cost.input === 0 &&
+    cost.output === 0 &&
+    cost.cacheRead === 0 &&
+    cost.cacheWrite === 0
+  );
+}
+
+/** Prompt for per-million-token pricing rates. */
+async function promptCost(
+  label: string,
+  existing: ModelCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+): Promise<ModelCost | null> {
+  const fields: Array<{ key: keyof ModelCost; msg: string }> = [
+    { key: "input", msg: `${label} cost.input ($/M input tokens)` },
+    { key: "output", msg: `${label} cost.output ($/M output tokens)` },
+    { key: "cacheRead", msg: `${label} cost.cacheRead ($/M cached-input tokens)` },
+    { key: "cacheWrite", msg: `${label} cost.cacheWrite ($/M cache-write tokens)` },
+  ];
+  const cost: ModelCost = { ...existing };
+  for (const f of fields) {
+    const v = await p.text({
+      message: f.msg,
+      initialValue: String(existing[f.key] ?? 0),
+      validate: nonNegativeNumberValidate,
+      placeholder: "0",
+    });
+    if (handleCancel(v)) return null;
+    cost[f.key] = Number(v);
+  }
+  return cost;
+}
+
+/** Prompt for input modalities (text / image). */
+async function promptInputModalities(
+  existing: Array<"text" | "image"> = ["text"],
+): Promise<Array<"text" | "image"> | null> {
+  const sel = await p.multiselect({
+    message: "Input modalities (Space to toggle, Enter to confirm)",
+    options: [
+      { value: "text", label: "text" },
+      { value: "image", label: "image" },
+    ],
+    initialValues: existing.length ? existing : ["text"],
+    required: true,
+  });
+  if (handleCancel(sel)) return null;
+  const list = sel as string[];
+  return list.includes("text") ? (list as Array<"text" | "image">) : ["text"];
+}
+
+/**
+ * Ask for cost + input modalities. Cost editing is behind a confirm so the
+ * common zero-cost gateway/local path stays fast.
+ * Returns `{ cost, input }` or null on cancel.
+ */
+export async function promptCostAndInput(existing?: {
+  cost?: ModelCost;
+  input?: Array<"text" | "image">;
+}): Promise<{ cost: ModelCost; input: Array<"text" | "image"> } | null> {
+  const editCost = await p.confirm({
+    message: "Configure token pricing? (leave zeros for free/local models)",
+    initialValue: !isZeroCost(existing?.cost),
+  });
+  if (handleCancel(editCost)) return null;
+
+  let cost: ModelCost = existing?.cost ?? {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+  };
+  if (editCost) {
+    const c = await promptCost("Model", existing?.cost);
+    if (c === null) return null;
+    cost = c;
+  }
+
+  const input = await promptInputModalities(existing?.input);
+  if (input === null) return null;
+  return { cost, input };
 }
 
 async function promptReasoning(
@@ -152,7 +254,11 @@ export async function configureSelectedModels(
       maxTokens: m.maxTokens,
     });
     if (limits === null) return null;
-    return [{ ...m, reasoning, thinkingLevelMap: tlm, ...limits }];
+    const extras = await promptCostAndInput({ cost: m.cost, input: m.input });
+    if (extras === null) return null;
+    return [
+      { ...m, reasoning, thinkingLevelMap: tlm, ...limits, ...extras },
+    ];
   }
 
   const mode = await p.select({
@@ -184,7 +290,15 @@ export async function configureSelectedModels(
       maxTokens: models[0].maxTokens,
     });
     if (limits === null) return null;
-    return models.map((m) => ({ ...m, reasoning, thinkingLevelMap: tlm, ...limits }));
+    const extras = await promptCostAndInput();
+    if (extras === null) return null;
+    return models.map((m) => ({
+      ...m,
+      reasoning,
+      thinkingLevelMap: tlm,
+      ...limits,
+      ...extras,
+    }));
   }
 
   const out: ModelConfig[] = [];
@@ -203,7 +317,9 @@ export async function configureSelectedModels(
       maxTokens: m.maxTokens,
     });
     if (limits === null) return null;
-    out.push({ ...m, reasoning, thinkingLevelMap: tlm, ...limits });
+    const extras = await promptCostAndInput({ cost: m.cost, input: m.input });
+    if (extras === null) return null;
+    out.push({ ...m, reasoning, thinkingLevelMap: tlm, ...limits, ...extras });
   }
   return out;
 }
@@ -231,7 +347,7 @@ export async function promptNewModel(): Promise<ModelConfig | null> {
 
   const reasoning = await promptReasoning(
     "Supports reasoning/thinking?",
-    false,
+    guessReasoning(String(id)),
   );
   if (reasoning === null) return null;
 
@@ -244,6 +360,9 @@ export async function promptNewModel(): Promise<ModelConfig | null> {
   });
   if (limits === null) return null;
 
+  const extras = await promptCostAndInput();
+  if (extras === null) return null;
+
   return defaultModel({
     id: String(id).trim(),
     name: String(name || id).trim() || String(id).trim(),
@@ -251,6 +370,8 @@ export async function promptNewModel(): Promise<ModelConfig | null> {
     thinkingLevelMap: tlm,
     contextWindow: limits.contextWindow,
     maxTokens: limits.maxTokens,
+    input: extras.input,
+    cost: extras.cost,
   });
 }
 
@@ -286,6 +407,9 @@ export async function editOneModel(
   });
   if (limits === null) return null;
 
+  const extras = await promptCostAndInput({ cost: existing.cost, input: existing.input });
+  if (extras === null) return null;
+
   return defaultModel({
     id: String(id).trim(),
     name: String(name || id).trim() || String(id).trim(),
@@ -293,8 +417,8 @@ export async function editOneModel(
     thinkingLevelMap: tlm,
     contextWindow: limits.contextWindow,
     maxTokens: limits.maxTokens,
-    input: existing.input,
-    cost: existing.cost,
+    input: extras.input,
+    cost: extras.cost,
   });
 }
 

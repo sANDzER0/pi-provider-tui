@@ -1,4 +1,5 @@
 import { fetchWithTimeout, DEFAULT_FETCH_TIMEOUT_MS } from "./http.js";
+import { isReferenceValue, resolveValue } from "./env-resolve.js";
 import { defaultModel, type ApiType, type ModelConfig } from "./types.js";
 
 export function buildModelsUrl(baseUrl: string): string {
@@ -84,7 +85,16 @@ export async function fetchRemoteModels(opts: {
 > {
   const fetchFn = opts.fetchImpl ?? fetch;
   const url = buildModelsUrl(opts.baseUrl);
-  const headers = buildAuthHeaders(opts.api, opts.apiKey);
+
+  // Resolve $VAR / !command references before use (pi does the same at request time).
+  let apiKey = opts.apiKey;
+  if (apiKey && isReferenceValue(apiKey)) {
+    const res = await resolveValue(apiKey);
+    if (!res.ok) return { ok: false, error: res.error };
+    apiKey = res.value;
+  }
+
+  const headers = buildAuthHeaders(opts.api, apiKey);
   const timeoutMs = opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
   try {
     const res = await fetchWithTimeout(url, { headers }, timeoutMs, fetchFn);
