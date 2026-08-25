@@ -1,4 +1,4 @@
-import { buildAuthHeaders } from "./fetch-models.js";
+import { anthropicApiRoot, buildAuthHeaders } from "./fetch-models.js";
 import { isReferenceValue, resolveHeaders, resolveValue } from "./env-resolve.js";
 import { fetchWithTimeout, DEFAULT_FETCH_TIMEOUT_MS } from "./http.js";
 import type { ModelConfig, ProviderConfig } from "./types.js";
@@ -70,7 +70,9 @@ export async function testConnection(opts: {
       generationConfig: { maxOutputTokens: 1 },
     };
   } else {
-    url = joinUrl(provider.baseUrl, "/messages");
+    // pi passes baseUrl to the Anthropic SDK as baseURL, which posts
+    // {baseURL}/v1/messages — so the stored root must NOT include /v1.
+    url = joinUrl(anthropicApiRoot(provider.baseUrl), "/messages");
     headers = {
       ...headers,
       "anthropic-version": "2023-06-01",

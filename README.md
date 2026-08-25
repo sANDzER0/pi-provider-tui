@@ -52,6 +52,12 @@ PI_MODELS_PATH=/tmp/models.json pi-provider-tui
 - `anthropic-messages`
 - `google-generative-ai`
 
+> **anthropic-messages baseUrl convention:** enter the API root **without** `/v1`
+> (e.g. `https://api.anthropic.com` or `https://proxy.example.com`) — pi appends
+> `/v1/...` itself when talking to the Anthropic SDK. This tool follows the same
+> rule for model fetching and connection tests, and doctor flags entries that
+> end with `/v1`.
+
 **Edit → models** supports: list, add (manual or from gateway), edit one, remove, replace all.
 **Edit → provider** also covers custom request **headers** and pi's **compat** overrides
 (common fields as tri-state prompts plus a raw-JSON editor for advanced routing options).

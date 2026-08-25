@@ -61,9 +61,27 @@ describe("testConnection", () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     assert.equal(r.ok, true);
-    assert.match(calledUrl, /\/messages$/);
+    // legacy entry with trailing /v1 tolerated — no /v1/v1 doubling
+    assert.match(calledUrl, /\/v1\/messages$/);
     const h = new Headers(headers);
     assert.equal(h.get("anthropic-version"), "2023-06-01");
+  });
+
+  it("anthropic bare root gets /v1 appended exactly once", async () => {
+    let calledUrl = "";
+    const bare = await testConnection({
+      provider: {
+        ...baseProvider("anthropic-messages"),
+        baseUrl: "https://proxy.example.com",
+      },
+      model: defaultModel({ id: "m1" }),
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        calledUrl = String(input);
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    assert.equal(bare.ok, true);
+    assert.equal(calledUrl, "https://proxy.example.com/v1/messages");
   });
 
   it("returns not ok on HTTP error with body snippet", async () => {

@@ -84,6 +84,14 @@ export function examineDoc(doc: ModelsFile): DoctorIssue[] {
       });
     }
 
+    if (pr.api === "anthropic-messages" && /\/v1$/i.test(pr.baseUrl ?? "")) {
+      issues.push({
+        provider: id,
+        level: "error",
+        message: `baseUrl ends with /v1 — pi appends /v1 itself, so requests would go to ${pr.baseUrl}/v1/... (remove the trailing /v1)`,
+      });
+    }
+
     if (!pr.apiKey) {
       issues.push({
         provider: id,

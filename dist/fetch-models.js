@@ -2,7 +2,20 @@ import { fetchWithTimeout, DEFAULT_FETCH_TIMEOUT_MS } from "./http.js";
 import { isReferenceValue, resolveHeaders, resolveValue } from "./env-resolve.js";
 import { guessReasoning } from "./heuristics.js";
 import { defaultModel } from "./types.js";
-export function buildModelsUrl(baseUrl) {
+/**
+ * Anthropic's SDK (and therefore pi) appends `/v1/messages` to `baseUrl`, so
+ * anthropic-messages providers store the API root WITHOUT `/v1`. Normalize to
+ * the versioned root here; a trailing `/v1` is tolerated for legacy entries
+ * instead of producing `/v1/v1/…`.
+ */
+export function anthropicApiRoot(baseUrl) {
+    const trimmed = baseUrl.replace(/\/+$/, "");
+    return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed}/v1`;
+}
+export function buildModelsUrl(baseUrl, api) {
+    if (api === "anthropic-messages") {
+        return `${anthropicApiRoot(baseUrl)}/models`;
+    }
     const trimmed = baseUrl.replace(/\/+$/, "");
     if (/\/models$/i.test(trimmed))
         return trimmed;
@@ -87,7 +100,7 @@ export function parseModelsPayload(payload) {
 }
 export async function fetchRemoteModels(opts) {
     const fetchFn = opts.fetchImpl ?? fetch;
-    const url = buildModelsUrl(opts.baseUrl);
+    const url = buildModelsUrl(opts.baseUrl, opts.api);
     // Resolve $VAR / !command references before use (pi does the same at request time).
     let apiKey = opts.apiKey;
     if (apiKey && isReferenceValue(apiKey)) {

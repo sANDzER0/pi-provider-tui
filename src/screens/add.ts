@@ -51,13 +51,26 @@ export async function addProvider(
     validate: (v) => (v && isUrl(v.trim()) ? undefined : "Valid http(s) URL required"),
   });
   if (handleCancel(baseUrlRaw)) return null;
-  const baseUrl = String(baseUrlRaw).trim().replace(/\/+$/, "");
+  let baseUrl = String(baseUrlRaw).trim().replace(/\/+$/, "");
 
   const apiSel = await p.select({
     message: "API type",
     options: API_TYPES.map((a) => ({ value: a, label: a })),
   });
   if (handleCancel(apiSel)) return null;
+
+  if (apiSel === "anthropic-messages" && /\/v1$/i.test(baseUrl)) {
+    p.log.warn(
+      "anthropic-messages baseUrl should NOT include /v1 — pi appends it automatically.\n" +
+        `Stored as-is would make pi request ${baseUrl}/v1/...`,
+    );
+    const strip = await p.confirm({
+      message: `Strip the trailing "/v1" (save ${baseUrl.replace(/\/v1$/i, "")})?`,
+      initialValue: true,
+    });
+    if (handleCancel(strip)) return null;
+    if (strip) baseUrl = baseUrl.replace(/\/v1$/i, "");
+  }
   const api = apiSel as ApiType;
 
   const apiKeyRaw = await p.text({

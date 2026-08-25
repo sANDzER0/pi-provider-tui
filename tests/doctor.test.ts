@@ -49,6 +49,30 @@ describe("examineDoc", () => {
     assert.ok(b.some((i) => i.level === "error" && /missing api/.test(i.message)));
   });
 
+  it("flags anthropic-messages baseUrl with trailing /v1", () => {
+    const issues = examineDoc(
+      doc({
+        x: provider({
+          api: "anthropic-messages",
+          baseUrl: "https://api.anthropic.com/v1",
+        }),
+      }),
+    );
+    const hit = issues.find((i) => i.level === "error" && /ends with \/v1/.test(i.message));
+    assert.ok(hit);
+
+    // bare root is fine
+    const ok = examineDoc(
+      doc({
+        x: provider({
+          api: "anthropic-messages",
+          baseUrl: "https://api.anthropic.com",
+        }),
+      }),
+    );
+    assert.ok(!ok.some((i) => /ends with \/v1/.test(i.message)));
+  });
+
   it("reports unset env vars referenced by apiKey", () => {
     const issues = examineDoc(
       doc({

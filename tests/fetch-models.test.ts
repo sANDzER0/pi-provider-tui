@@ -1,11 +1,25 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  anthropicApiRoot,
   buildModelsUrl,
   buildAuthHeaders,
   parseModelsPayload,
   fetchRemoteModels,
 } from "../src/fetch-models.ts";
+
+describe("anthropicApiRoot", () => {
+  it("appends /v1 to bare roots (pi/SDK convention)", () => {
+    assert.equal(anthropicApiRoot("https://api.anthropic.com"), "https://api.anthropic.com/v1");
+    assert.equal(anthropicApiRoot("https://proxy.example.com/"), "https://proxy.example.com/v1");
+    assert.equal(anthropicApiRoot("https://gw.example.com/anthropic"), "https://gw.example.com/anthropic/v1");
+  });
+
+  it("does not double-append when /v1 already present (legacy entries)", () => {
+    assert.equal(anthropicApiRoot("https://api.anthropic.com/v1"), "https://api.anthropic.com/v1");
+    assert.equal(anthropicApiRoot("https://x.example.com/v1/"), "https://x.example.com/v1");
+  });
+});
 
 describe("buildModelsUrl", () => {
   it("appends /models when missing", () => {
@@ -115,6 +129,22 @@ describe("parseModelsPayload", () => {
     assert.equal(models[0].maxTokens, 65536);
     // heuristic: gemini 2.5+ is reasoning-capable
     assert.equal(models[0].reasoning, true);
+  });
+
+  it("routes anthropic through the versioned root regardless of stored form", () => {
+    assert.equal(
+      buildModelsUrl("https://api.anthropic.com", "anthropic-messages"),
+      "https://api.anthropic.com/v1/models",
+    );
+    assert.equal(
+      buildModelsUrl("https://legacy.example.com/v1", "anthropic-messages"),
+      "https://legacy.example.com/v1/models",
+    );
+    // non-anthropic apis keep the plain behavior even with same url shape
+    assert.equal(
+      buildModelsUrl("https://api.anthropic.com", "openai-completions"),
+      "https://api.anthropic.com/models",
+    );
   });
 
   it("returns empty for garbage", () => {

@@ -1,5 +1,12 @@
 import { type ApiType, type ModelConfig } from "./types.js";
-export declare function buildModelsUrl(baseUrl: string): string;
+/**
+ * Anthropic's SDK (and therefore pi) appends `/v1/messages` to `baseUrl`, so
+ * anthropic-messages providers store the API root WITHOUT `/v1`. Normalize to
+ * the versioned root here; a trailing `/v1` is tolerated for legacy entries
+ * instead of producing `/v1/v1/…`.
+ */
+export declare function anthropicApiRoot(baseUrl: string): string;
+export declare function buildModelsUrl(baseUrl: string, api?: ApiType): string;
 export declare function buildAuthHeaders(api: ApiType, apiKey?: string): Record<string, string>;
 export declare function parseModelsPayload(payload: unknown): {
     models: ModelConfig[];
