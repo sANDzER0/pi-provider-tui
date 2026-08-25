@@ -31,6 +31,7 @@ Commands:
   test     --id ID [--model MODEL] [--mode endpoint|full] [--json]
   doctor   [--json]
   undo     [-y]
+  version
   help
 
 Options shared by all commands:
@@ -332,6 +333,13 @@ async function cmdUndo(argv: string[]): Promise<number> {
 
 export async function runCli(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
+  if (cmd === "--version" || cmd === "-v" || cmd === "version") {
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
+    const { version } = require("../package.json") as { version: string };
+    info(version);
+    return 0;
+  }
   switch (cmd) {
     case "add":
       return cmdAdd(rest);
