@@ -1,8 +1,9 @@
 import * as p from "@clack/prompts";
 import { maskKey } from "../models-file.js";
+import { paginatedNote } from "../paginate.js";
 import type { ModelsFile } from "../types.js";
 
-export function listProviders(doc: ModelsFile): void {
+export async function listProviders(doc: ModelsFile): Promise<void> {
   const ids = Object.keys(doc.providers);
   if (ids.length === 0) {
     p.note("No providers configured.", "Providers");
@@ -14,5 +15,5 @@ export function listProviders(doc: ModelsFile): void {
     const n = pr.models?.length ?? 0;
     return `${id}  |  ${name}  |  ${pr.api}  |  ${pr.baseUrl}  |  models:${n}  |  key:${maskKey(pr.apiKey)}`;
   });
-  p.note(lines.join("\n"), `Providers (${ids.length})`);
+  await paginatedNote(`Providers (${ids.length})`, lines);
 }

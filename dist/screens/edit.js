@@ -1,4 +1,5 @@
 import * as p from "@clack/prompts";
+import { PAGE_SIZE, paginatedNote } from "../paginate.js";
 import { maskKey, removeProvider, upsertProvider } from "../models-file.js";
 import { API_TYPES, defaultAuthHeader, summarizeThinkingLevelMap, } from "../types.js";
 import { handleCancel } from "../ui-cancel.js";
@@ -25,12 +26,8 @@ function modelLabel(m) {
     bits.push(`ctx=${m.contextWindow}`, `out=${m.maxTokens}`);
     return bits.join(" · ");
 }
-function listModelsNote(models) {
-    if (models.length === 0) {
-        p.note("(none)", "Models");
-        return;
-    }
-    p.note(models.map((m, i) => `${i + 1}. ${modelLabel(m)}`).join("\n"), `Models (${models.length})`);
+async function listModelsNote(models) {
+    await paginatedNote(`Models (${models.length})`, models.map((m, i) => `${i + 1}. ${modelLabel(m)}`));
 }
 async function selectModelIndex(models, message) {
     if (models.length === 0) {
@@ -43,6 +40,7 @@ async function selectModelIndex(models, message) {
             value: String(i),
             label: modelLabel(m),
         })),
+        maxItems: PAGE_SIZE,
     });
     if (handleCancel(sel))
         return null;
@@ -76,7 +74,7 @@ async function editModelsMenu(provider) {
             case "back":
                 return { ...provider, models };
             case "list":
-                listModelsNote(models);
+                await listModelsNote(models);
                 break;
             case "add-manual": {
                 const one = await promptNewModel();
@@ -182,6 +180,7 @@ async function editModelsMenu(provider) {
                         label: modelLabel(m),
                     })),
                     required: true,
+                    maxItems: PAGE_SIZE,
                 });
                 if (handleCancel(toRemove))
                     break;

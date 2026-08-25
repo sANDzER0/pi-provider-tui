@@ -86,7 +86,7 @@ pi-provider-tui undo -y
 `PI_MODELS_PATH` overrides the config path for all commands. Exit codes: `0` ok, `1` operation failed, `2` usage error.
 
 Merging fetched models that already exist locally asks whether to keep your local settings or overwrite them.
-Lists longer than 15 models offer a keyword filter before selection.
+Lists longer than 15 models offer a keyword filter before selection; every model list (pickers and read-only views) is shown in a scrollable viewport or paginated so huge gateway catalogs stay usable.
 
 ## Security
 

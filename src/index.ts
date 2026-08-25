@@ -80,7 +80,7 @@ async function main(): Promise<void> {
 
     try {
       if (action === "list") {
-        listProviders(doc);
+        await listProviders(doc);
         continue;
       }
       if (action === "test") {
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
         continue;
       }
       if (action === "doctor") {
-        runDoctorScreen(doc);
+        await runDoctorScreen(doc);
         continue;
       }
       if (action === "undo") {

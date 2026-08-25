@@ -1,2 +1,2 @@
 import type { ModelsFile } from "../types.js";
-export declare function listProviders(doc: ModelsFile): void;
+export declare function listProviders(doc: ModelsFile): Promise<void>;

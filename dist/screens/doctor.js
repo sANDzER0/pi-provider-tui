@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import { examineDoc } from "../doctor.js";
+import { paginatedNote } from "../paginate.js";
 function formatIssue(issue) {
     const scope = [issue.provider, issue.model]
         .filter(Boolean)
@@ -7,7 +8,7 @@ function formatIssue(issue) {
     const icon = issue.level === "error" ? "✖" : issue.level === "warn" ? "▲" : "ℹ";
     return `${icon} ${scope ? `${scope} — ` : ""}${issue.message}`;
 }
-export function runDoctorScreen(doc) {
+export async function runDoctorScreen(doc) {
     const ids = Object.keys(doc.providers ?? {});
     if (ids.length === 0) {
         p.log.warn("No providers configured — nothing to check.");
@@ -21,7 +22,7 @@ export function runDoctorScreen(doc) {
         p.log.success(`All checks passed (${ids.length} provider(s), no issues).`);
         return;
     }
-    p.note(issues.map(formatIssue).join("\n"), "Health check results");
+    await paginatedNote(`Health check results (${issues.length})`, issues.map(formatIssue));
     const parts = [];
     if (errors.length)
         parts.push(`${errors.length} error(s)`);

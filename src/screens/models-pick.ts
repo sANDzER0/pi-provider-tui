@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { fetchRemoteModels } from "../fetch-models.js";
 import { guessReasoning } from "../heuristics.js";
+import { PAGE_SIZE } from "../paginate.js";
 import {
   defaultModel,
   THINKING_LEVELS,
@@ -521,6 +522,7 @@ export async function pickModels(opts: {
           label: m.name === m.id ? m.id : `${m.name} (${m.id})`,
         })),
         required: true,
+        maxItems: PAGE_SIZE,
         initialValues,
       });
       if (handleCancel(selected)) return null;

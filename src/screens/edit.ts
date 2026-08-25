@@ -1,4 +1,5 @@
 import * as p from "@clack/prompts";
+import { PAGE_SIZE, paginatedNote } from "../paginate.js";
 import { maskKey, removeProvider, upsertProvider } from "../models-file.js";
 import {
   API_TYPES,
@@ -40,14 +41,10 @@ function modelLabel(m: ModelConfig): string {
   return bits.join(" · ");
 }
 
-function listModelsNote(models: ModelConfig[]): void {
-  if (models.length === 0) {
-    p.note("(none)", "Models");
-    return;
-  }
-  p.note(
-    models.map((m, i) => `${i + 1}. ${modelLabel(m)}`).join("\n"),
+async function listModelsNote(models: ModelConfig[]): Promise<void> {
+  await paginatedNote(
     `Models (${models.length})`,
+    models.map((m, i) => `${i + 1}. ${modelLabel(m)}`),
   );
 }
 
@@ -65,6 +62,7 @@ async function selectModelIndex(
       value: String(i),
       label: modelLabel(m),
     })),
+    maxItems: PAGE_SIZE,
   });
   if (handleCancel(sel)) return null;
   return Number(sel);
@@ -102,7 +100,7 @@ async function editModelsMenu(
         return { ...provider, models };
 
       case "list":
-        listModelsNote(models);
+        await listModelsNote(models);
         break;
 
       case "add-manual": {
@@ -207,6 +205,7 @@ async function editModelsMenu(
             label: modelLabel(m),
           })),
           required: true,
+          maxItems: PAGE_SIZE,
         });
         if (handleCancel(toRemove)) break;
         const removeSet = new Set(toRemove as string[]);

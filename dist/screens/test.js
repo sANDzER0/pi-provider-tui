@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import { fetchRemoteModels } from "../fetch-models.js";
+import { PAGE_SIZE } from "../paginate.js";
 import { testConnection } from "../test-connection.js";
 import { handleCancel } from "../ui-cancel.js";
 export async function testProviderScreen(doc) {
@@ -63,6 +64,7 @@ export async function testProviderScreen(doc) {
             value: m.id,
             label: m.name === m.id ? m.id : `${m.name} (${m.id})`,
         })),
+        maxItems: PAGE_SIZE,
     });
     if (handleCancel(modelId))
         return;
