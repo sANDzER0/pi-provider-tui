@@ -10,6 +10,8 @@ import {
   type ProviderConfig,
 } from "../types.js";
 import { handleCancel } from "../ui-cancel.js";
+import { editCompatScreen } from "./compat.js";
+import { editHeadersScreen } from "./headers.js";
 import {
   editOneModel,
   manualModels,
@@ -125,6 +127,7 @@ async function editModelsMenu(
           baseUrl: provider.baseUrl,
           api: provider.api,
           apiKey: provider.apiKey,
+          headers: provider.headers,
         });
         if (added === null) break;
         const byId = new Map(models.map((m) => [m.id, m]));
@@ -222,6 +225,7 @@ async function editModelsMenu(
           baseUrl: provider.baseUrl,
           api: provider.api,
           apiKey: provider.apiKey,
+          headers: provider.headers,
         });
         if (next === null) break;
         models = next;
@@ -277,6 +281,16 @@ export async function editProvider(
         { value: "api", label: `api (${provider.api})` },
         { value: "apiKey", label: `apiKey (${maskKey(provider.apiKey)})` },
         { value: "authHeader", label: `authHeader (${provider.authHeader})` },
+        {
+          value: "headers",
+          label: `headers (${Object.keys(provider.headers ?? {}).length})`,
+          hint: "custom request headers",
+        },
+        {
+          value: "compat",
+          label: `compat (${Object.keys(provider.compat ?? {}).length})`,
+          hint: "pi compatibility overrides",
+        },
         {
           value: "models",
           label: `models (${(provider.models ?? []).length})`,
@@ -383,6 +397,24 @@ export async function editProvider(
         });
         if (handleCancel(v)) return null;
         provider = { ...provider, authHeader: Boolean(v) };
+        break;
+      }
+      case "headers": {
+        const next = await editHeadersScreen(provider.headers);
+        if (next === null) break;
+        const cleaned = { ...provider };
+        if (Object.keys(next).length > 0) cleaned.headers = next;
+        else delete cleaned.headers;
+        provider = cleaned;
+        break;
+      }
+      case "compat": {
+        const next = await editCompatScreen(provider.compat);
+        if (next === null) break;
+        const cleaned = { ...provider };
+        if (Object.keys(next).length > 0) cleaned.compat = next;
+        else delete cleaned.compat;
+        provider = cleaned;
         break;
       }
       case "models": {

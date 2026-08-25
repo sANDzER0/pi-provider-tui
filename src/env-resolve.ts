@@ -118,6 +118,23 @@ export interface RunCommandOptions {
   execImpl?: CommandRunner;
 }
 
+/**
+ * Resolve a header map's values ($VAR / !command references).
+ * Fails fast with the offending header named.
+ */
+export async function resolveHeaders(
+  headers: Record<string, string> | undefined,
+): Promise<{ ok: true; value: Record<string, string> } | { ok: false; error: string }> {
+  if (!headers) return { ok: true, value: {} };
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    const res = await resolveValue(String(v));
+    if (!res.ok) return { ok: false, error: `header "${k}": ${res.error}` };
+    out[k] = res.value;
+  }
+  return { ok: true, value: out };
+}
+
 const defaultRunner = (timeoutMs: number): CommandRunner => async (command) => {
   try {
     const { stdout } = await execAsync(command, {

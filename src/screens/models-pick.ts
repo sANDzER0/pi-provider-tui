@@ -375,7 +375,11 @@ export async function promptNewModel(): Promise<ModelConfig | null> {
   });
 }
 
-/** Edit fields of an existing model (id can be changed). */
+/**
+ * Edit fields of an existing model (id can be changed).
+ * Unknown extra fields (compat, samplingParams, per-model api, …) are
+ * preserved untouched.
+ */
 export async function editOneModel(
   existing: ModelConfig,
 ): Promise<ModelConfig | null> {
@@ -410,16 +414,23 @@ export async function editOneModel(
   const extras = await promptCostAndInput({ cost: existing.cost, input: existing.input });
   if (extras === null) return null;
 
-  return defaultModel({
+  // Spread first so fields pi supports but this TUI doesn't edit survive.
+  const next: ModelConfig = {
+    ...existing,
     id: String(id).trim(),
     name: String(name || id).trim() || String(id).trim(),
     reasoning,
-    thinkingLevelMap: tlm,
     contextWindow: limits.contextWindow,
     maxTokens: limits.maxTokens,
     input: extras.input,
     cost: extras.cost,
-  });
+  };
+  if (tlm === undefined) {
+    delete next.thinkingLevelMap; // "omit" preset removes a stale map
+  } else {
+    next.thinkingLevelMap = tlm;
+  }
+  return next;
 }
 
 export async function manualModels(): Promise<ModelConfig[] | null> {
@@ -446,6 +457,8 @@ export async function pickModels(opts: {
   baseUrl: string;
   api: ApiType;
   apiKey?: string;
+  /** Custom headers (values may use $VAR / !command references). */
+  headers?: Record<string, string>;
   skipFetch?: boolean;
 }): Promise<ModelConfig[] | null> {
   if (!opts.skipFetch) {
@@ -455,6 +468,7 @@ export async function pickModels(opts: {
       baseUrl: opts.baseUrl,
       api: opts.api,
       apiKey: opts.apiKey,
+      headers: opts.headers,
     });
     spinner.stop(
       result.ok

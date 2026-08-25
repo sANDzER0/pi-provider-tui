@@ -1,4 +1,4 @@
-export type ApiType = "openai-completions" | "openai-responses" | "anthropic-messages";
+export type ApiType = "openai-completions" | "openai-responses" | "anthropic-messages" | "google-generative-ai";
 export declare const API_TYPES: ApiType[];
 /**
  * Pi thinking levels, ordered from least to most effort.
@@ -52,6 +52,10 @@ export interface ProviderConfig {
     api: ApiType;
     apiKey?: string;
     authHeader?: boolean;
+    /** Custom request headers; values support $VAR / !command references. */
+    headers?: Record<string, string>;
+    /** Provider-level compatibility overrides passed through to pi verbatim. */
+    compat?: Record<string, unknown>;
     models: ModelConfig[];
 }
 export interface ModelsFile {

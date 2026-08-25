@@ -42,6 +42,7 @@ export async function testProviderScreen(doc: ModelsFile): Promise<void> {
       baseUrl: provider.baseUrl,
       api: provider.api,
       apiKey: provider.apiKey,
+      headers: provider.headers,
     });
     spinner.stop(res.ok ? "OK" : "Failed");
     if (res.ok) {

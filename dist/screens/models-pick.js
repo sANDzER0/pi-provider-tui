@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import { fetchRemoteModels } from "../fetch-models.js";
+import { guessReasoning } from "../heuristics.js";
 import { defaultModel, THINKING_LEVELS, THINKING_PRESETS, } from "../types.js";
 import { handleCancel } from "../ui-cancel.js";
 /**
@@ -15,8 +16,15 @@ export async function promptThinkingLevelMap(existing) {
         hint: preset.hint,
     }));
     const sel = await p.select({
-        message: "思考档位 (thinking level map)",
-        options: [...presetOptions, { value: "custom", label: "自定义档位…", hint: "逐个配置每个思考级别的保留/禁用" }],
+        message: "Thinking level map",
+        options: [
+            ...presetOptions,
+            {
+                value: "custom",
+                label: "Customize levels…",
+                hint: "Configure each thinking level individually",
+            },
+        ],
     });
     if (handleCancel(sel))
         return null;
@@ -25,7 +33,7 @@ export async function promptThinkingLevelMap(existing) {
         return preset?.map; // may be undefined ("default" preset)
     }
     // --- Custom: configure each level ---
-    p.log.info("对每个级别选择: 保留(发送该值) 或 禁用(隐藏该档位)。空回车 = 使用默认。");
+    p.log.info("For each level choose: keep (send this value), disable (hide it), or default (omit).");
     const map = {};
     for (const level of THINKING_LEVELS) {
         const existingVal = existing?.[level];
@@ -35,11 +43,11 @@ export async function promptThinkingLevelMap(existing) {
                 ? "default"
                 : existingVal;
         const choice = await p.select({
-            message: `级别 "${level}" (当前: ${initialHint})`,
+            message: `Level "${level}" (current: ${initialHint})`,
             options: [
-                { value: "keep", label: `保留 — 发送 "${level}"`, hint: "该档位可用" },
-                { value: "disable", label: "禁用 — 设为 null", hint: "隐藏/跳过该档位" },
-                { value: "default", label: "默认 — 省略该级别", hint: "由 pi 自动处理" },
+                { value: "keep", label: `Keep — send "${level}"`, hint: "level available" },
+                { value: "disable", label: "Disable — set to null", hint: "hide/skip this level" },
+                { value: "default", label: "Default — omit", hint: "let pi decide" },
             ],
         });
         if (handleCancel(choice))
@@ -70,6 +78,86 @@ function positiveNumberValidate(v) {
     return v && Number.isFinite(Number(v)) && Number(v) > 0
         ? undefined
         : "Positive number required";
+}
+function nonNegativeNumberValidate(v) {
+    return v && Number.isFinite(Number(v)) && Number(v) >= 0
+        ? undefined
+        : "Non-negative number required";
+}
+function isZeroCost(cost) {
+    if (!cost)
+        return true;
+    return (cost.input === 0 &&
+        cost.output === 0 &&
+        cost.cacheRead === 0 &&
+        cost.cacheWrite === 0);
+}
+/** Prompt for per-million-token pricing rates. */
+async function promptCost(label, existing = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }) {
+    const fields = [
+        { key: "input", msg: `${label} cost.input ($/M input tokens)` },
+        { key: "output", msg: `${label} cost.output ($/M output tokens)` },
+        { key: "cacheRead", msg: `${label} cost.cacheRead ($/M cached-input tokens)` },
+        { key: "cacheWrite", msg: `${label} cost.cacheWrite ($/M cache-write tokens)` },
+    ];
+    const cost = { ...existing };
+    for (const f of fields) {
+        const v = await p.text({
+            message: f.msg,
+            initialValue: String(existing[f.key] ?? 0),
+            validate: nonNegativeNumberValidate,
+            placeholder: "0",
+        });
+        if (handleCancel(v))
+            return null;
+        cost[f.key] = Number(v);
+    }
+    return cost;
+}
+/** Prompt for input modalities (text / image). */
+async function promptInputModalities(existing = ["text"]) {
+    const sel = await p.multiselect({
+        message: "Input modalities (Space to toggle, Enter to confirm)",
+        options: [
+            { value: "text", label: "text" },
+            { value: "image", label: "image" },
+        ],
+        initialValues: existing.length ? existing : ["text"],
+        required: true,
+    });
+    if (handleCancel(sel))
+        return null;
+    const list = sel;
+    return list.includes("text") ? list : ["text"];
+}
+/**
+ * Ask for cost + input modalities. Cost editing is behind a confirm so the
+ * common zero-cost gateway/local path stays fast.
+ * Returns `{ cost, input }` or null on cancel.
+ */
+export async function promptCostAndInput(existing) {
+    const editCost = await p.confirm({
+        message: "Configure token pricing? (leave zeros for free/local models)",
+        initialValue: !isZeroCost(existing?.cost),
+    });
+    if (handleCancel(editCost))
+        return null;
+    let cost = existing?.cost ?? {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+    };
+    if (editCost) {
+        const c = await promptCost("Model", existing?.cost);
+        if (c === null)
+            return null;
+        cost = c;
+    }
+    const input = await promptInputModalities(existing?.input);
+    if (input === null)
+        return null;
+    return { cost, input };
 }
 async function promptReasoning(message, initial) {
     const reasoningSel = await p.select({
@@ -125,7 +213,12 @@ export async function configureSelectedModels(models) {
         });
         if (limits === null)
             return null;
-        return [{ ...m, reasoning, thinkingLevelMap: tlm, ...limits }];
+        const extras = await promptCostAndInput({ cost: m.cost, input: m.input });
+        if (extras === null)
+            return null;
+        return [
+            { ...m, reasoning, thinkingLevelMap: tlm, ...limits, ...extras },
+        ];
     }
     const mode = await p.select({
         message: `Configure ${models.length} selected models`,
@@ -156,7 +249,16 @@ export async function configureSelectedModels(models) {
         });
         if (limits === null)
             return null;
-        return models.map((m) => ({ ...m, reasoning, thinkingLevelMap: tlm, ...limits }));
+        const extras = await promptCostAndInput();
+        if (extras === null)
+            return null;
+        return models.map((m) => ({
+            ...m,
+            reasoning,
+            thinkingLevelMap: tlm,
+            ...limits,
+            ...extras,
+        }));
     }
     const out = [];
     for (let i = 0; i < models.length; i++) {
@@ -174,7 +276,10 @@ export async function configureSelectedModels(models) {
         });
         if (limits === null)
             return null;
-        out.push({ ...m, reasoning, thinkingLevelMap: tlm, ...limits });
+        const extras = await promptCostAndInput({ cost: m.cost, input: m.input });
+        if (extras === null)
+            return null;
+        out.push({ ...m, reasoning, thinkingLevelMap: tlm, ...limits, ...extras });
     }
     return out;
 }
@@ -196,7 +301,7 @@ export async function promptNewModel() {
     });
     if (handleCancel(name))
         return null;
-    const reasoning = await promptReasoning("Supports reasoning/thinking?", false);
+    const reasoning = await promptReasoning("Supports reasoning/thinking?", guessReasoning(String(id)));
     if (reasoning === null)
         return null;
     const tlm = await maybePromptThinkingLevelMap(reasoning);
@@ -208,6 +313,9 @@ export async function promptNewModel() {
     });
     if (limits === null)
         return null;
+    const extras = await promptCostAndInput();
+    if (extras === null)
+        return null;
     return defaultModel({
         id: String(id).trim(),
         name: String(name || id).trim() || String(id).trim(),
@@ -215,9 +323,15 @@ export async function promptNewModel() {
         thinkingLevelMap: tlm,
         contextWindow: limits.contextWindow,
         maxTokens: limits.maxTokens,
+        input: extras.input,
+        cost: extras.cost,
     });
 }
-/** Edit fields of an existing model (id can be changed). */
+/**
+ * Edit fields of an existing model (id can be changed).
+ * Unknown extra fields (compat, samplingParams, per-model api, …) are
+ * preserved untouched.
+ */
 export async function editOneModel(existing) {
     const id = await p.text({
         message: "Model id",
@@ -244,16 +358,27 @@ export async function editOneModel(existing) {
     });
     if (limits === null)
         return null;
-    return defaultModel({
+    const extras = await promptCostAndInput({ cost: existing.cost, input: existing.input });
+    if (extras === null)
+        return null;
+    // Spread first so fields pi supports but this TUI doesn't edit survive.
+    const next = {
+        ...existing,
         id: String(id).trim(),
         name: String(name || id).trim() || String(id).trim(),
         reasoning,
-        thinkingLevelMap: tlm,
         contextWindow: limits.contextWindow,
         maxTokens: limits.maxTokens,
-        input: existing.input,
-        cost: existing.cost,
-    });
+        input: extras.input,
+        cost: extras.cost,
+    };
+    if (tlm === undefined) {
+        delete next.thinkingLevelMap; // "omit" preset removes a stale map
+    }
+    else {
+        next.thinkingLevelMap = tlm;
+    }
+    return next;
 }
 export async function manualModels() {
     const models = [];
@@ -273,6 +398,8 @@ export async function manualModels() {
     }
     return models;
 }
+/** Show the keyword filter prompt only for long model lists. */
+const FILTER_PROMPT_THRESHOLD = 15;
 export async function pickModels(opts) {
     if (!opts.skipFetch) {
         const spinner = p.spinner();
@@ -281,6 +408,7 @@ export async function pickModels(opts) {
             baseUrl: opts.baseUrl,
             api: opts.api,
             apiKey: opts.apiKey,
+            headers: opts.headers,
         });
         spinner.stop(result.ok
             ? `Fetched ${result.models.length} model(s)`
@@ -289,14 +417,38 @@ export async function pickModels(opts) {
             if (result.skipped > 0) {
                 p.log.warn(`Skipped ${result.skipped} unparseable entries`);
             }
+            // Optional keyword filter keeps huge gateway lists manageable.
+            let candidates = result.models;
+            if (candidates.length > FILTER_PROMPT_THRESHOLD) {
+                const kw = await p.text({
+                    message: `Filter by keyword? (${candidates.length} models — empty shows all)`,
+                    placeholder: "e.g. sonnet, gpt, gemini",
+                });
+                if (handleCancel(kw))
+                    return null;
+                const q = String(kw ?? "")
+                    .trim()
+                    .toLowerCase();
+                if (q) {
+                    candidates = candidates.filter((m) => m.id.toLowerCase().includes(q) ||
+                        m.name.toLowerCase().includes(q));
+                    if (candidates.length === 0) {
+                        p.log.warn(`No models match "${q}" — showing all.`);
+                        candidates = result.models;
+                    }
+                    else {
+                        p.log.info(`${candidates.length} model(s) match "${q}".`);
+                    }
+                }
+            }
             // Clack multiselect: Space toggles, Enter submits.
             // required:true blocks empty submit (was falling through to manual).
             // Single model: pre-check so Enter alone works.
-            const initialValues = result.models.length === 1 ? [result.models[0].id] : undefined;
+            const initialValues = candidates.length === 1 ? [candidates[0].id] : undefined;
             p.log.info("Tip: Space = check/uncheck, Enter = confirm selection.");
             const selected = await p.multiselect({
-                message: "Select models (Space to check, Enter to confirm)",
-                options: result.models.map((m) => ({
+                message: `Select models (${candidates.length}) — Space to check, Enter to confirm`,
+                options: candidates.map((m) => ({
                     value: m.id,
                     label: m.name === m.id ? m.id : `${m.name} (${m.id})`,
                 })),

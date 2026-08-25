@@ -1,5 +1,5 @@
 import { fetchWithTimeout, DEFAULT_FETCH_TIMEOUT_MS } from "./http.js";
-import { isReferenceValue, resolveValue } from "./env-resolve.js";
+import { isReferenceValue, resolveHeaders, resolveValue } from "./env-resolve.js";
 import { guessReasoning } from "./heuristics.js";
 import { defaultModel, type ApiType, type ModelConfig } from "./types.js";
 
@@ -114,6 +114,8 @@ export async function fetchRemoteModels(opts: {
   baseUrl: string;
   api: ApiType;
   apiKey?: string;
+  /** Custom headers (values may use $VAR / !command references). */
+  headers?: Record<string, string>;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }): Promise<
@@ -132,6 +134,12 @@ export async function fetchRemoteModels(opts: {
   }
 
   const headers = buildAuthHeaders(opts.api, apiKey);
+
+  // Custom provider headers win over auth defaults.
+  const custom = await resolveHeaders(opts.headers);
+  if (!custom.ok) return { ok: false, error: custom.error };
+  Object.assign(headers, custom.value);
+
   const timeoutMs = opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
   try {
     const res = await fetchWithTimeout(url, { headers }, timeoutMs, fetchFn);

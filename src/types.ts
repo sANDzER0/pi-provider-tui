@@ -127,6 +127,10 @@ export interface ProviderConfig {
   api: ApiType;
   apiKey?: string;
   authHeader?: boolean;
+  /** Custom request headers; values support $VAR / !command references. */
+  headers?: Record<string, string>;
+  /** Provider-level compatibility overrides passed through to pi verbatim. */
+  compat?: Record<string, unknown>;
   models: ModelConfig[];
 }
 

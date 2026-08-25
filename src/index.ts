@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as p from "@clack/prompts";
+import { runCli } from "./cli.js";
 import {
   getModelsPath,
   hasUndoHistory,
@@ -45,6 +46,13 @@ async function loadOrRecover(): Promise<ModelsFile> {
 }
 
 async function main(): Promise<void> {
+  // Non-interactive CLI mode when arguments are present.
+  const argv = process.argv.slice(2);
+  if (argv.length > 0) {
+    const code = await runCli(argv);
+    process.exit(code);
+  }
+
   p.intro("pi-provider-tui");
   p.log.info(`models.json → ${getModelsPath()}`);
 

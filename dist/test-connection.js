@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from "./fetch-models.js";
+import { isReferenceValue, resolveHeaders, resolveValue } from "./env-resolve.js";
 import { fetchWithTimeout, DEFAULT_FETCH_TIMEOUT_MS } from "./http.js";
 function joinUrl(baseUrl, suffix) {
     const base = baseUrl.replace(/\/+$/, "");
@@ -11,7 +12,15 @@ export async function testConnection(opts) {
     const fetchFn = opts.fetchImpl ?? fetch;
     const timeoutMs = opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
     const { provider, model } = opts;
-    const auth = buildAuthHeaders(provider.api, provider.apiKey);
+    // Resolve $VAR / !command references before use (pi does the same at request time).
+    let rawKey = provider.apiKey;
+    if (rawKey && isReferenceValue(rawKey)) {
+        const res = await resolveValue(rawKey);
+        if (!res.ok)
+            return { ok: false, detail: res.error };
+        rawKey = res.value;
+    }
+    const auth = buildAuthHeaders(provider.api, rawKey);
     // When authHeader is explicitly false, still send provider-specific keys
     // from buildAuthHeaders for anthropic; for openai, omit Bearer if authHeader false.
     let headers = {
@@ -20,6 +29,13 @@ export async function testConnection(opts) {
     };
     if (provider.authHeader === false && provider.api !== "anthropic-messages") {
         delete headers.Authorization;
+    }
+    // Custom provider headers win over everything set above.
+    {
+        const custom = await resolveHeaders(provider.headers);
+        if (!custom.ok)
+            return { ok: false, detail: custom.error };
+        Object.assign(headers, custom.value);
     }
     let url;
     let body;
@@ -37,6 +53,13 @@ export async function testConnection(opts) {
             model: model.id,
             input: "ping",
             max_output_tokens: 1,
+        };
+    }
+    else if (provider.api === "google-generative-ai") {
+        url = joinUrl(provider.baseUrl, `/models/${model.id}:generateContent`);
+        body = {
+            contents: [{ role: "user", parts: [{ text: "ping" }] }],
+            generationConfig: { maxOutputTokens: 1 },
         };
     }
     else {

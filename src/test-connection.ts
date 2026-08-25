@@ -1,5 +1,5 @@
 import { buildAuthHeaders } from "./fetch-models.js";
-import { isReferenceValue, resolveValue } from "./env-resolve.js";
+import { isReferenceValue, resolveHeaders, resolveValue } from "./env-resolve.js";
 import { fetchWithTimeout, DEFAULT_FETCH_TIMEOUT_MS } from "./http.js";
 import type { ModelConfig, ProviderConfig } from "./types.js";
 
@@ -37,6 +37,13 @@ export async function testConnection(opts: {
   };
   if (provider.authHeader === false && provider.api !== "anthropic-messages") {
     delete headers.Authorization;
+  }
+
+  // Custom provider headers win over everything set above.
+  {
+    const custom = await resolveHeaders(provider.headers);
+    if (!custom.ok) return { ok: false, detail: custom.error };
+    Object.assign(headers, custom.value);
   }
 
   let url: string;

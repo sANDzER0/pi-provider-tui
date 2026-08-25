@@ -46,6 +46,14 @@ export function normalizeProvider(raw: unknown): ProviderConfig {
     apiKey: typeof obj.apiKey === "string" ? obj.apiKey : undefined,
     authHeader:
       typeof obj.authHeader === "boolean" ? obj.authHeader : undefined,
+    headers:
+      obj.headers && typeof obj.headers === "object" && !Array.isArray(obj.headers)
+        ? (obj.headers as Record<string, string>)
+        : undefined,
+    compat:
+      obj.compat && typeof obj.compat === "object" && !Array.isArray(obj.compat)
+        ? (obj.compat as Record<string, unknown>)
+        : undefined,
     models: models as ProviderConfig["models"],
   };
 }

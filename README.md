@@ -51,8 +51,9 @@ PI_MODELS_PATH=/tmp/models.json pi-provider-tui
 - `google-generative-ai`
 
 **Edit → models** supports: list, add (manual or from gateway), edit one, remove, replace all.
-Merging fetched models that already exist locally asks whether to keep your local settings or overwrite them.
-Lists longer than 15 models offer a keyword filter before selection.
+**Edit → provider** also covers custom request **headers** and pi's **compat** overrides
+(common fields as tri-state prompts plus a raw-JSON editor for advanced routing options).
+Editing a model preserves fields this tool does not manage (`samplingParams`, model-level `compat`, …).
 
 **Secrets:** `apiKey` accepts pi's value-resolution forms — a literal (`sk-...`), an environment reference (`$MY_KEY` or `${MY_KEY}`), or a command (`!op read ...`). References are resolved at request time by pi and by this tool when testing; the raw value is stored in `models.json` untouched.
 
@@ -66,6 +67,26 @@ After saving, verify:
 ```bash
 pi --list-models
 ```
+
+## Non-interactive CLI
+
+Every common operation is also scriptable:
+
+```bash
+pi-provider-tui add --id my-gw --base-url https://gw.example.com/v1 \
+    --api openai-completions --key '$MY_KEY' --models foo,bar -y
+pi-provider-tui list [--json]
+pi-provider-tui get --id my-gw
+pi-provider-tui remove --id my-gw -y
+pi-provider-tui test --id my-gw [--model foo] [--mode endpoint|full] [--json]
+pi-provider-tui doctor [--json]
+pi-provider-tui undo -y
+```
+
+`PI_MODELS_PATH` overrides the config path for all commands. Exit codes: `0` ok, `1` operation failed, `2` usage error.
+
+Merging fetched models that already exist locally asks whether to keep your local settings or overwrite them.
+Lists longer than 15 models offer a keyword filter before selection.
 
 ## Security
 

@@ -1,7 +1,9 @@
 import * as p from "@clack/prompts";
-import { maskKey, upsertProvider } from "../models-file.js";
+import { maskKey, removeProvider, upsertProvider } from "../models-file.js";
 import { API_TYPES, defaultAuthHeader, summarizeThinkingLevelMap, } from "../types.js";
 import { handleCancel } from "../ui-cancel.js";
+import { editCompatScreen } from "./compat.js";
+import { editHeadersScreen } from "./headers.js";
 import { editOneModel, manualModels, pickModels, promptNewModel, } from "./models-pick.js";
 function isUrl(s) {
     try {
@@ -100,19 +102,50 @@ async function editModelsMenu(provider) {
                     baseUrl: provider.baseUrl,
                     api: provider.api,
                     apiKey: provider.apiKey,
+                    headers: provider.headers,
                 });
                 if (added === null)
                     break;
                 const byId = new Map(models.map((m) => [m.id, m]));
+                const conflicts = added.filter((m) => byId.has(m.id));
+                let overwrite = true;
+                if (conflicts.length > 0) {
+                    const strat = await p.select({
+                        message: `${conflicts.length} fetched model(s) already exist locally`,
+                        options: [
+                            {
+                                value: "keep",
+                                label: "Keep local settings",
+                                hint: "only add brand-new ids; local edits preserved",
+                            },
+                            {
+                                value: "overwrite",
+                                label: "Overwrite with fetched values",
+                                hint: "replace existing entries by id",
+                            },
+                        ],
+                        initialValue: "keep",
+                    });
+                    if (handleCancel(strat))
+                        break;
+                    overwrite = strat === "overwrite";
+                }
                 let overwrote = 0;
                 for (const m of added) {
-                    if (byId.has(m.id))
+                    if (byId.has(m.id)) {
                         overwrote++;
+                        if (!overwrite)
+                            continue;
+                    }
                     byId.set(m.id, m);
                 }
                 models = [...byId.values()];
                 p.log.success(`Merged ${added.length} model(s)` +
-                    (overwrote ? ` (${overwrote} overwritten by id)` : ""));
+                    (overwrote
+                        ? overwrite
+                            ? ` (${overwrote} overwritten by id)`
+                            : ` (${overwrote} kept local)`
+                        : ""));
                 break;
             }
             case "edit-one": {
@@ -167,6 +200,7 @@ async function editModelsMenu(provider) {
                     baseUrl: provider.baseUrl,
                     api: provider.api,
                     apiKey: provider.apiKey,
+                    headers: provider.headers,
                 });
                 if (next === null)
                     break;
@@ -203,7 +237,8 @@ export async function editProvider(doc) {
     });
     if (handleCancel(idSel))
         return null;
-    const id = String(idSel);
+    const originalId = String(idSel);
+    let id = originalId;
     const existing = doc.providers[id];
     let provider = {
         ...existing,
@@ -213,11 +248,22 @@ export async function editProvider(doc) {
         const field = await p.select({
             message: `Editing "${id}" — choose field`,
             options: [
+                { value: "rename", label: `rename id (${id})` },
                 { value: "name", label: `name (${provider.name ?? id})` },
                 { value: "baseUrl", label: `baseUrl (${provider.baseUrl})` },
                 { value: "api", label: `api (${provider.api})` },
                 { value: "apiKey", label: `apiKey (${maskKey(provider.apiKey)})` },
                 { value: "authHeader", label: `authHeader (${provider.authHeader})` },
+                {
+                    value: "headers",
+                    label: `headers (${Object.keys(provider.headers ?? {}).length})`,
+                    hint: "custom request headers",
+                },
+                {
+                    value: "compat",
+                    label: `compat (${Object.keys(provider.compat ?? {}).length})`,
+                    hint: "pi compatibility overrides",
+                },
                 {
                     value: "models",
                     label: `models (${(provider.models ?? []).length})`,
@@ -242,7 +288,30 @@ export async function editProvider(doc) {
                 });
                 if (handleCancel(ok) || !ok)
                     return null;
-                return upsertProvider(doc, id, provider);
+                let next = upsertProvider(doc, id, provider);
+                if (id !== originalId) {
+                    next = removeProvider(next, originalId);
+                }
+                return next;
+            }
+            case "rename": {
+                const v = await p.text({
+                    message: "New provider id",
+                    initialValue: id,
+                    validate: (x) => (x && x.trim() ? undefined : "Required"),
+                });
+                if (handleCancel(v))
+                    return null;
+                const newId = String(v).trim();
+                if (newId === id)
+                    break;
+                if (doc.providers[newId]) {
+                    p.log.error(`Provider "${newId}" already exists.`);
+                    break;
+                }
+                p.log.success(`Will save as "${newId}" on write.`);
+                id = newId;
+                break;
             }
             case "name": {
                 const v = await p.text({
@@ -308,6 +377,30 @@ export async function editProvider(doc) {
                 if (handleCancel(v))
                     return null;
                 provider = { ...provider, authHeader: Boolean(v) };
+                break;
+            }
+            case "headers": {
+                const next = await editHeadersScreen(provider.headers);
+                if (next === null)
+                    break;
+                const cleaned = { ...provider };
+                if (Object.keys(next).length > 0)
+                    cleaned.headers = next;
+                else
+                    delete cleaned.headers;
+                provider = cleaned;
+                break;
+            }
+            case "compat": {
+                const next = await editCompatScreen(provider.compat);
+                if (next === null)
+                    break;
+                const cleaned = { ...provider };
+                if (Object.keys(next).length > 0)
+                    cleaned.compat = next;
+                else
+                    delete cleaned.compat;
+                provider = cleaned;
                 break;
             }
             case "models": {

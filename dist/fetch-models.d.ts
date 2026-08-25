@@ -9,6 +9,8 @@ export declare function fetchRemoteModels(opts: {
     baseUrl: string;
     api: ApiType;
     apiKey?: string;
+    /** Custom headers (values may use $VAR / !command references). */
+    headers?: Record<string, string>;
     fetchImpl?: typeof fetch;
     timeoutMs?: number;
 }): Promise<{
