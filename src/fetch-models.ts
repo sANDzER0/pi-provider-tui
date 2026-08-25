@@ -1,5 +1,6 @@
 import { fetchWithTimeout, DEFAULT_FETCH_TIMEOUT_MS } from "./http.js";
 import { isReferenceValue, resolveValue } from "./env-resolve.js";
+import { guessReasoning } from "./heuristics.js";
 import { defaultModel, type ApiType, type ModelConfig } from "./types.js";
 
 export function buildModelsUrl(baseUrl: string): string {
@@ -19,6 +20,9 @@ export function buildAuthHeaders(
       Authorization: `Bearer ${apiKey}`,
     };
   }
+  if (api === "google-generative-ai") {
+    return { "x-goog-api-key": apiKey };
+  }
   return { Authorization: `Bearer ${apiKey}` };
 }
 
@@ -30,6 +34,13 @@ function asList(payload: unknown): unknown[] {
     if (Array.isArray(obj.models)) return obj.models;
   }
   return [];
+}
+
+function optionalNumber(...values: unknown[]): number | undefined {
+  for (const v of values) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+  }
+  return undefined;
 }
 
 export function parseModelsPayload(payload: unknown): {
@@ -45,28 +56,54 @@ export function parseModelsPayload(payload: unknown): {
       continue;
     }
     const row = item as Record<string, unknown>;
-    if (typeof row.id !== "string" || !row.id) {
+
+    // google-generative-ai rows carry "name": "models/<id>" and no id field
+    const rawId =
+      typeof row.id === "string" && row.id
+        ? row.id
+        : typeof row.name === "string"
+          ? row.name.replace(/^models\//i, "")
+          : "";
+    if (!rawId) {
       skipped++;
       continue;
     }
+
+    // Skip non-generation entries (embeddings, aqa, …) when the gateway tells us
+    if (Array.isArray(row.supportedGenerationMethods)) {
+      const methods = (row.supportedGenerationMethods as unknown[]).filter(
+        (m): m is string => typeof m === "string",
+      );
+      if (methods.length > 0 && !methods.includes("generateContent")) {
+        skipped++;
+        continue;
+      }
+    }
+
+    const displayName =
+      typeof row.displayName === "string" && row.displayName
+        ? row.displayName
+        : typeof row.name === "string" && !/^models\//i.test(row.name)
+          ? row.name
+          : undefined;
+
     models.push(
       defaultModel({
-        id: row.id,
-        name: typeof row.name === "string" ? row.name : undefined,
+        id: rawId,
+        name: displayName,
+        // Heuristic initial value; user confirms/overrides per model next.
         reasoning:
-          typeof row.reasoning === "boolean" ? row.reasoning : undefined,
-        contextWindow:
-          typeof row.context_window === "number"
-            ? row.context_window
-            : typeof row.contextWindow === "number"
-              ? row.contextWindow
-              : undefined,
-        maxTokens:
-          typeof row.max_tokens === "number"
-            ? row.max_tokens
-            : typeof row.maxTokens === "number"
-              ? row.maxTokens
-              : undefined,
+          typeof row.reasoning === "boolean" ? row.reasoning : guessReasoning(rawId),
+        contextWindow: optionalNumber(
+          row.context_window,
+          row.contextWindow,
+          row.inputTokenLimit,
+        ),
+        maxTokens: optionalNumber(
+          row.max_tokens,
+          row.maxTokens,
+          row.outputTokenLimit,
+        ),
       }),
     );
   }

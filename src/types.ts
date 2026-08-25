@@ -1,12 +1,14 @@
 export type ApiType =
   | "openai-completions"
   | "openai-responses"
-  | "anthropic-messages";
+  | "anthropic-messages"
+  | "google-generative-ai";
 
 export const API_TYPES: ApiType[] = [
   "openai-completions",
   "openai-responses",
   "anthropic-messages",
+  "google-generative-ai",
 ];
 
 /**
@@ -134,7 +136,7 @@ export interface ModelsFile {
 }
 
 export function defaultAuthHeader(api: ApiType): boolean {
-  return api !== "anthropic-messages";
+  return api !== "anthropic-messages" && api !== "google-generative-ai";
 }
 
 export function defaultModel(

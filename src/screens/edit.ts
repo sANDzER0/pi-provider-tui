@@ -128,15 +128,44 @@ async function editModelsMenu(
         });
         if (added === null) break;
         const byId = new Map(models.map((m) => [m.id, m]));
+        const conflicts = added.filter((m) => byId.has(m.id));
+        let overwrite = true;
+        if (conflicts.length > 0) {
+          const strat = await p.select({
+            message: `${conflicts.length} fetched model(s) already exist locally`,
+            options: [
+              {
+                value: "keep",
+                label: "Keep local settings",
+                hint: "only add brand-new ids; local edits preserved",
+              },
+              {
+                value: "overwrite",
+                label: "Overwrite with fetched values",
+                hint: "replace existing entries by id",
+              },
+            ],
+            initialValue: "keep",
+          });
+          if (handleCancel(strat)) break;
+          overwrite = strat === "overwrite";
+        }
         let overwrote = 0;
         for (const m of added) {
-          if (byId.has(m.id)) overwrote++;
+          if (byId.has(m.id)) {
+            overwrote++;
+            if (!overwrite) continue;
+          }
           byId.set(m.id, m);
         }
         models = [...byId.values()];
         p.log.success(
           `Merged ${added.length} model(s)` +
-            (overwrote ? ` (${overwrote} overwritten by id)` : ""),
+            (overwrote
+              ? overwrite
+                ? ` (${overwrote} overwritten by id)`
+                : ` (${overwrote} kept local)`
+              : ""),
         );
         break;
       }

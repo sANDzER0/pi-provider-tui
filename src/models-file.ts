@@ -102,6 +102,45 @@ export async function loadModelsFile(
   };
 }
 
+/** Number of rolling backups kept: models.json.bak.1 … models.json.bak.N */
+export const BACKUP_KEEP = 5;
+
+function backupPath(filePath: string, n: number): string {
+  return `${filePath}.bak.${n}`;
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Shift .bak.N → .bak.(N+1), dropping the oldest. Call before writing bak.1. */
+async function rotateBackups(filePath: string): Promise<void> {
+  const oldest = backupPath(filePath, BACKUP_KEEP);
+  if (await pathExists(oldest)) await fs.rm(oldest);
+  for (let i = BACKUP_KEEP - 1; i >= 1; i--) {
+    const from = backupPath(filePath, i);
+    if (await pathExists(from)) {
+      await fs.rename(from, backupPath(filePath, i + 1)).catch(() => {});
+    }
+  }
+}
+
+/** Most recent backup: numbered chain first, then legacy single .bak. */
+export async function latestBackupPath(
+  filePath: string,
+): Promise<string | null> {
+  for (let i = 1; i <= BACKUP_KEEP; i++) {
+    if (await pathExists(backupPath(filePath, i))) return backupPath(filePath, i);
+  }
+  if (await pathExists(filePath + ".bak")) return filePath + ".bak";
+  return null;
+}
+
 export async function saveModelsFile(
   doc: ModelsFile,
   filePath: string = getModelsPath(),
@@ -110,13 +149,10 @@ export async function saveModelsFile(
   await fs.mkdir(dir, { recursive: true });
 
   const tmp = filePath + ".tmp";
-  const bak = filePath + ".bak";
 
-  try {
-    await fs.access(filePath);
-    await fs.copyFile(filePath, bak);
-  } catch {
-    // no existing file — skip bak
+  if (await pathExists(filePath)) {
+    await rotateBackups(filePath);
+    await fs.copyFile(filePath, backupPath(filePath, 1));
   }
 
   const body = JSON.stringify(doc, null, 2) + "\n";
@@ -125,12 +161,43 @@ export async function saveModelsFile(
   await fs.chmod(filePath, 0o600);
 }
 
+/** Startup recovery: restore the most recent backup (no history change). */
 export async function restoreFromBackup(
   filePath: string = getModelsPath(),
 ): Promise<ModelsFile> {
-  const bak = filePath + ".bak";
-  await fs.copyFile(bak, filePath);
+  const src = await latestBackupPath(filePath);
+  if (!src) throw new Error(`No backup found next to ${filePath}`);
+  await fs.copyFile(src, filePath);
   await fs.chmod(filePath, 0o600);
+  return loadModelsFile(filePath);
+}
+
+/** True when at least one undo step (.bak.1) exists. */
+export async function hasUndoHistory(
+  filePath: string = getModelsPath(),
+): Promise<boolean> {
+  return pathExists(backupPath(filePath, 1));
+}
+
+/**
+ * Revert to the previous write and shift history down, so repeated calls
+ * walk back through successive writes.
+ */
+export async function undoLastWrite(
+  filePath: string = getModelsPath(),
+): Promise<ModelsFile> {
+  const src = backupPath(filePath, 1);
+  if (!(await pathExists(src))) {
+    throw new Error("No undo history (models.json.bak.1 not found).");
+  }
+  await fs.rename(src, filePath);
+  await fs.chmod(filePath, 0o600);
+  for (let i = 2; i <= BACKUP_KEEP; i++) {
+    const from = backupPath(filePath, i);
+    if (await pathExists(from)) {
+      await fs.rename(from, backupPath(filePath, i - 1)).catch(() => {});
+    }
+  }
   return loadModelsFile(filePath);
 }
 

@@ -44,6 +44,12 @@ describe("buildAuthHeaders", () => {
     assert.equal(h.Authorization, "Bearer sk-x");
   });
 
+  it("google sends x-goog-api-key", () => {
+    const h = buildAuthHeaders("google-generative-ai", "g-key");
+    assert.equal(h["x-goog-api-key"], "g-key");
+    assert.equal(h.Authorization, undefined);
+  });
+
   it("empty key yields empty headers", () => {
     assert.deepEqual(buildAuthHeaders("openai-completions", ""), {});
     assert.deepEqual(buildAuthHeaders("openai-completions", undefined), {});
@@ -82,6 +88,33 @@ describe("parseModelsPayload", () => {
       "x",
     );
     assert.equal(parseModelsPayload([{ id: "y" }]).models[0].id, "y");
+  });
+
+  it("parses google-generative-ai rows", () => {
+    const { models, skipped } = parseModelsPayload({
+      models: [
+        {
+          name: "models/gemini-2.5-pro",
+          displayName: "Gemini 2.5 Pro",
+          inputTokenLimit: 1048576,
+          outputTokenLimit: 65536,
+          supportedGenerationMethods: ["generateContent", "countTokens"],
+        },
+        {
+          name: "models/text-embedding-004",
+          supportedGenerationMethods: ["embedContent"],
+        },
+        { name: "models/" },
+      ],
+    });
+    assert.equal(skipped, 2);
+    assert.equal(models.length, 1);
+    assert.equal(models[0].id, "gemini-2.5-pro");
+    assert.equal(models[0].name, "Gemini 2.5 Pro");
+    assert.equal(models[0].contextWindow, 1048576);
+    assert.equal(models[0].maxTokens, 65536);
+    // heuristic: gemini 2.5+ is reasoning-capable
+    assert.equal(models[0].reasoning, true);
   });
 
   it("returns empty for garbage", () => {

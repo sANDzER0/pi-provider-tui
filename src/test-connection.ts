@@ -56,6 +56,12 @@ export async function testConnection(opts: {
       input: "ping",
       max_output_tokens: 1,
     };
+  } else if (provider.api === "google-generative-ai") {
+    url = joinUrl(provider.baseUrl, `/models/${model.id}:generateContent`);
+    body = {
+      contents: [{ role: "user", parts: [{ text: "ping" }] }],
+      generationConfig: { maxOutputTokens: 1 },
+    };
   } else {
     url = joinUrl(provider.baseUrl, "/messages");
     headers = {

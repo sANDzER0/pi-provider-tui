@@ -10,6 +10,10 @@ import {
   removeProvider,
   maskKey,
   restoreFromBackup,
+  undoLastWrite,
+  hasUndoHistory,
+  latestBackupPath,
+  BACKUP_KEEP,
   normalizeProvider,
   normalizeProviders,
 } from "../src/models-file.ts";
@@ -132,7 +136,7 @@ describe("saveModelsFile", () => {
     });
     await saveModelsFile(doc, p);
 
-    const bak = await fs.readFile(p + ".bak", "utf8");
+    const bak = await fs.readFile(p + ".bak.1", "utf8");
     assert.ok(bak.includes("keep"));
 
     const final = JSON.parse(await fs.readFile(p, "utf8"));
@@ -158,12 +162,66 @@ describe("upsertProvider / removeProvider", () => {
 });
 
 describe("restoreFromBackup", () => {
-  it("restores from .bak", async () => {
+  it("restores from .bak.1", async () => {
     const dir = await tempDir();
     const p = path.join(dir, "models.json");
     await saveModelsFile({ providers: { old: sampleProvider() } }, p);
     await saveModelsFile({ providers: { neu: sampleProvider() } }, p);
     const restored = await restoreFromBackup(p);
     assert.ok(restored.providers.old);
+  });
+});
+
+describe("rolling backups", () => {
+  const docWith = (tag: string): ModelsFile => ({
+    providers: { [tag]: sampleProvider() },
+  });
+
+  it("keeps at most BACKUP_KEEP numbered backups in order", async () => {
+    const dir = await tempDir();
+    const p = path.join(dir, "models.json");
+    for (let v = 0; v <= BACKUP_KEEP + 2; v++) {
+      await saveModelsFile(docWith(`v${v}`), p);
+    }
+    // after 8 writes (v0..v7): bak.1=v6 … bak.5=v2, no bak.6, no legacy .bak
+    for (let i = 1; i <= BACKUP_KEEP; i++) {
+      const content = await fs.readFile(`${p}.bak.${i}`, "utf8");
+      assert.ok(content.includes(`v${BACKUP_KEEP + 2 - i}`), `bak.${i}`);
+    }
+    await assert.rejects(() => fs.access(`${p}.bak.${BACKUP_KEEP + 1}`));
+    await assert.rejects(() => fs.access(p + ".bak"));
+    assert.equal(await latestBackupPath(p), `${p}.bak.1`);
+  });
+
+  it("undo walks back through writes then runs out", async () => {
+    const dir = await tempDir();
+    const p = path.join(dir, "models.json");
+    await saveModelsFile(docWith("first"), p);
+    await saveModelsFile(docWith("second"), p);
+    await saveModelsFile(docWith("third"), p);
+    assert.equal(await hasUndoHistory(p), true);
+
+    let doc = await undoLastWrite(p);
+    assert.ok(doc.providers.second);
+    doc = await undoLastWrite(p);
+    assert.ok(doc.providers.first);
+    assert.equal(await hasUndoHistory(p), false);
+    await assert.rejects(() => undoLastWrite(p), /No undo history/);
+    // current file still intact after failed undo
+    const cur = await loadModelsFile(p);
+    assert.ok(cur.providers.first);
+  });
+
+  it("restore prefers newest backup over legacy .bak", async () => {
+    const dir = await tempDir();
+    const p = path.join(dir, "models.json");
+    await saveModelsFile(docWith("legacy"), p);
+    // simulate a legacy backup left by an older version
+    await fs.copyFile(p, p + ".bak");
+    await saveModelsFile(docWith("newer"), p); // creates .bak.1 = legacy-content
+    const src = await latestBackupPath(p);
+    assert.equal(src, p + ".bak.1");
+    const restored = await restoreFromBackup(p);
+    assert.ok(restored.providers.legacy);
   });
 });

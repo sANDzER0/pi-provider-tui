@@ -2,13 +2,16 @@
 import * as p from "@clack/prompts";
 import {
   getModelsPath,
+  hasUndoHistory,
   loadModelsFile,
   restoreFromBackup,
   saveModelsFile,
+  undoLastWrite,
 } from "./models-file.js";
 import type { ModelsFile } from "./types.js";
 import { handleCancel } from "./ui-cancel.js";
 import { addProvider } from "./screens/add.js";
+import { runDoctorScreen } from "./screens/doctor.js";
 import { editProvider } from "./screens/edit.js";
 import { listProviders } from "./screens/list.js";
 import { removeProviderScreen } from "./screens/remove.js";
@@ -56,6 +59,8 @@ async function main(): Promise<void> {
         { value: "edit", label: "Edit provider" },
         { value: "remove", label: "Remove provider" },
         { value: "test", label: "Test connection" },
+        { value: "doctor", label: "Run health checks (doctor)" },
+        { value: "undo", label: "Undo last write" },
         { value: "quit", label: "Quit" },
       ],
     });
@@ -72,6 +77,24 @@ async function main(): Promise<void> {
       }
       if (action === "test") {
         await testProviderScreen(doc);
+        continue;
+      }
+      if (action === "doctor") {
+        runDoctorScreen(doc);
+        continue;
+      }
+      if (action === "undo") {
+        if (!(await hasUndoHistory())) {
+          p.log.warn("No undo history — nothing written yet.");
+          continue;
+        }
+        const ok = await p.confirm({
+          message: "Restore models.json from the last write's backup?",
+          initialValue: false,
+        });
+        if (handleCancel(ok) || !ok) continue;
+        doc = await undoLastWrite();
+        p.log.success("Undid last write.");
         continue;
       }
 

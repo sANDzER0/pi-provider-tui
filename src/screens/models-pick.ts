@@ -439,6 +439,9 @@ export async function manualModels(): Promise<ModelConfig[] | null> {
   return models;
 }
 
+/** Show the keyword filter prompt only for long model lists. */
+const FILTER_PROMPT_THRESHOLD = 15;
+
 export async function pickModels(opts: {
   baseUrl: string;
   api: ApiType;
@@ -464,16 +467,42 @@ export async function pickModels(opts: {
         p.log.warn(`Skipped ${result.skipped} unparseable entries`);
       }
 
+      // Optional keyword filter keeps huge gateway lists manageable.
+      let candidates = result.models;
+      if (candidates.length > FILTER_PROMPT_THRESHOLD) {
+        const kw = await p.text({
+          message: `Filter by keyword? (${candidates.length} models — empty shows all)`,
+          placeholder: "e.g. sonnet, gpt, gemini",
+        });
+        if (handleCancel(kw)) return null;
+        const q = String(kw ?? "")
+          .trim()
+          .toLowerCase();
+        if (q) {
+          candidates = candidates.filter(
+            (m) =>
+              m.id.toLowerCase().includes(q) ||
+              m.name.toLowerCase().includes(q),
+          );
+          if (candidates.length === 0) {
+            p.log.warn(`No models match "${q}" — showing all.`);
+            candidates = result.models;
+          } else {
+            p.log.info(`${candidates.length} model(s) match "${q}".`);
+          }
+        }
+      }
+
       // Clack multiselect: Space toggles, Enter submits.
       // required:true blocks empty submit (was falling through to manual).
       // Single model: pre-check so Enter alone works.
       const initialValues =
-        result.models.length === 1 ? [result.models[0].id] : undefined;
+        candidates.length === 1 ? [candidates[0].id] : undefined;
 
       p.log.info("Tip: Space = check/uncheck, Enter = confirm selection.");
       const selected = await p.multiselect({
-        message: "Select models (Space to check, Enter to confirm)",
-        options: result.models.map((m) => ({
+        message: `Select models (${candidates.length}) — Space to check, Enter to confirm`,
+        options: candidates.map((m) => ({
           value: m.id,
           label: m.name === m.id ? m.id : `${m.name} (${m.id})`,
         })),

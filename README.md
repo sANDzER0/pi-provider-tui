@@ -48,8 +48,11 @@ PI_MODELS_PATH=/tmp/models.json pi-provider-tui
 - `openai-completions`
 - `openai-responses`
 - `anthropic-messages`
+- `google-generative-ai`
 
 **Edit → models** supports: list, add (manual or from gateway), edit one, remove, replace all.
+Merging fetched models that already exist locally asks whether to keep your local settings or overwrite them.
+Lists longer than 15 models offer a keyword filter before selection.
 
 **Secrets:** `apiKey` accepts pi's value-resolution forms — a literal (`sk-...`), an environment reference (`$MY_KEY` or `${MY_KEY}`), or a command (`!op read ...`). References are resolved at request time by pi and by this tool when testing; the raw value is stored in `models.json` untouched.
 
@@ -70,7 +73,11 @@ API keys are stored **in plaintext** in `models.json` by design. The tool sets f
 
 ## Backup
 
-Each write copies the previous file to `models.json.bak`. On corrupt JSON at startup, the TUI offers restore from `.bak`.
+Every write rotates a rolling history of the previous file versions: `models.json.bak.1` (most recent) through `models.json.bak.5`. The main menu's **Undo last write** restores `.bak.1` and steps back through history; on corrupt JSON at startup the TUI offers restore from the most recent backup (legacy single-file `models.json.bak` is still honored).
+
+## Health checks
+
+**Run health checks (doctor)** scans the config for common mistakes: missing baseUrl/api on custom providers, unknown API types, unset environment variables referenced by apiKey, duplicate endpoints or model ids, invalid limits/costs, and thinkingLevelMap entries pi would ignore.
 
 ## Development
 
