@@ -41,7 +41,9 @@ Override config path:
 PI_MODELS_PATH=/tmp/models.json pi-provider-tui
 ```
 
-**Main menu:** List / Add / Edit / Remove / Test connection / Quit
+**Main menu:** List / Add / Edit / Remove / Test connection / Run health checks (doctor) / Undo last write / Quit
+
+**Reasoning pre-fill:** when models are fetched from a gateway or entered manually, the reasoning flag is pre-filled from id patterns (o-series, gpt-5+, deepseek-r\*, qwq/qwen3+, claude 3.7+/4.x, gemini 2.5+, grok 4+, …) — always overridable.
 
 **Supported API types:**
 
@@ -81,6 +83,7 @@ pi-provider-tui remove --id my-gw -y
 pi-provider-tui test --id my-gw [--model foo] [--mode endpoint|full] [--json]
 pi-provider-tui doctor [--json]
 pi-provider-tui undo -y
+pi-provider-tui version
 ```
 
 `PI_MODELS_PATH` overrides the config path for all commands. Exit codes: `0` ok, `1` operation failed, `2` usage error.
